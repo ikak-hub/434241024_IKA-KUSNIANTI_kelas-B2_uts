@@ -9,6 +9,13 @@ import 'pages/ticket_detail_page.dart';
 import 'pages/create_ticket_page.dart';
 import 'pages/profile_page.dart';
 
+// Admin pages
+import 'pages/admin/admin_dashboard_page.dart';
+import 'pages/admin/admin_ticket_management_page.dart';
+import 'pages/admin/admin_ticket_detail_page.dart';
+import 'pages/admin/admin_user_management_page.dart';
+import 'pages/admin/admin_profile_page.dart';
+
 void main() {
   runApp(const HelpdeskApp());
 }
@@ -40,14 +47,38 @@ class _HelpdeskAppState extends State<HelpdeskApp> {
       themeMode: _themeMode,
       initialRoute: '/splash',
       routes: {
+        // ── Common ──────────────────────────────────────────────
         '/splash': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/dashboard': (context) => DashboardScreen(onToggleTheme: _toggleTheme, themeMode: _themeMode),
+
+        // ── User routes ──────────────────────────────────────────
+        '/dashboard': (context) => DashboardScreen(
+              onToggleTheme: _toggleTheme,
+              themeMode: _themeMode,
+            ),
         '/tickets': (context) => const TicketListScreen(),
         '/ticket-detail': (context) => const TicketDetailScreen(),
         '/create-ticket': (context) => const CreateTicketScreen(),
-        '/profile': (context) => ProfileScreen(onToggleTheme: _toggleTheme, themeMode: _themeMode),
+        '/profile': (context) => ProfileScreen(
+              onToggleTheme: _toggleTheme,
+              themeMode: _themeMode,
+            ),
+
+        // ── Admin routes ─────────────────────────────────────────
+        '/admin-dashboard': (context) => AdminDashboardScreen(
+              onToggleTheme: _toggleTheme,
+              themeMode: _themeMode,
+            ),
+        '/admin-tickets': (context) =>
+            const AdminTicketManagementScreen(),
+        '/admin-ticket-detail': (context) =>
+            const AdminTicketDetailScreen(),
+        '/admin-users': (context) => const AdminUserManagementScreen(),
+        '/admin-profile': (context) => AdminProfileScreen(
+              onToggleTheme: _toggleTheme,
+              themeMode: _themeMode,
+            ),
       },
     );
   }
