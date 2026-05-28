@@ -1,5 +1,8 @@
+// lib/pages/admin/admin_ticket_detail_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../services/ticket_store.dart';
 
 class AdminTicketDetailScreen extends StatefulWidget {
   const AdminTicketDetailScreen({super.key});
@@ -9,20 +12,11 @@ class AdminTicketDetailScreen extends StatefulWidget {
       _AdminTicketDetailScreenState();
 }
 
-class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
+class _AdminTicketDetailScreenState
+    extends State<AdminTicketDetailScreen> {
   final _replyCtrl = TextEditingController();
   String? _currentStatus;
   String _assignedTo = 'Belum Ditugaskan';
-
-  final List<Map<String, dynamic>> _comments = [
-    {
-      'user': 'User',
-      'role': 'User',
-      'message': 'Masalah sudah berlangsung sejak kemarin pagi.',
-      'time': 'Kemarin 09:15',
-      'isHelpdesk': false,
-    },
-  ];
 
   final List<String> _technicians = [
     'Belum Ditugaskan',
@@ -33,30 +27,39 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    TicketStore().addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
     _replyCtrl.dispose();
+    TicketStore().removeListener(_refresh);
     super.dispose();
   }
 
-  void _sendReply() {
+  void _sendReply(String ticketId) {
     if (_replyCtrl.text.trim().isEmpty) return;
-    setState(() {
-      _comments.add({
-        'user': 'Admin Helpdesk',
-        'role': 'Admin',
-        'message': _replyCtrl.text.trim(),
-        'time': 'Baru saja',
-        'isHelpdesk': true,
-      });
+    final now = DateTime.now();
+    TicketStore().addComment(ticketId, {
+      'user': 'Admin Helpdesk',
+      'role': 'Admin',
+      'message': _replyCtrl.text.trim(),
+      'time':
+          '${now.day}/${now.month}/${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+      'isHelpdesk': true,
     });
     _replyCtrl.clear();
   }
 
-  void _updateStatus(Map<String, dynamic> ticket, String newStatus) {
-    setState(() {
-      ticket['status'] = newStatus;
-      _currentStatus = newStatus;
-    });
+  void _updateStatus(String ticketId, String newStatus) {
+    TicketStore().updateStatus(ticketId, newStatus);
+    setState(() => _currentStatus = newStatus);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Status diubah ke $newStatus'),
@@ -67,8 +70,9 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ticket = (ModalRoute.of(context)?.settings.arguments as Map?) ??
-        {
+    final Map<String, dynamic> ticket =
+        (ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?) ??
+        <String, dynamic>{
           'id': '#TKT-001',
           'title': 'Koneksi internet tidak stabil di lab A',
           'status': 'Open',
@@ -78,30 +82,48 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
           'description':
               'Koneksi internet di laboratorium A sering putus dan sangat mengganggu aktivitas perkuliahan.',
           'assignedTo': '-',
+          'attachments': <String>[],
+          'comments': <Map<String, dynamic>>[],
         };
 
-    _currentStatus ??= ticket['status'] as String;
+    // Always read fresh from store
+    final ticketId = ticket['id'] as String;
+    final liveTicket = TicketStore().allTickets
+        .firstWhere((t) => t['id'] == ticketId, orElse: () => ticket);
+
+    _currentStatus ??= liveTicket['status'] as String;
+    // sync if store updated externally
+    final storeStatus = liveTicket['status'] as String;
+    if (_currentStatus != storeStatus) {
+      _currentStatus = storeStatus;
+    }
+
+    final assignedInStore = liveTicket['assignedTo'] as String? ?? 'Belum Ditugaskan';
+    if (assignedInStore != 'Belum Ditugaskan' && _assignedTo == 'Belum Ditugaskan') {
+      _assignedTo = assignedInStore;
+    }
 
     final statusColor = _statusColor(_currentStatus!);
+    final comments = (liveTicket['comments'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    final attachments =
+        (liveTicket['attachments'] as List?)?.cast<String>() ?? [];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(ticket['id'] ?? '#TKT'),
+        title: Text(ticketId),
         actions: [
           PopupMenuButton<String>(
-            onSelected: (v) => _updateStatus(ticket, v),
-            itemBuilder: (_) => [
-              'Open',
-              'In Progress',
-              'Resolved',
-              'Closed'
-            ]
-                .map((s) => PopupMenuItem(
-                      value: s,
-                      child: Text(s,
-                          style: TextStyle(color: _statusColor(s))),
-                    ))
-                .toList(),
+            onSelected: (v) => _updateStatus(ticketId, v),
+            itemBuilder: (_) =>
+                ['Open', 'In Progress', 'Resolved', 'Closed']
+                    .map((s) => PopupMenuItem(
+                          value: s,
+                          child: Text(s,
+                              style: TextStyle(color: _statusColor(s))),
+                        ))
+                    .toList(),
             icon: const Icon(Icons.more_vert_rounded),
           ),
         ],
@@ -114,14 +136,14 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Ticket info card
+                  // Ticket info
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(ticket['title'] ?? '',
+                          Text(liveTicket['title'] as String,
                               style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700)),
@@ -131,23 +153,77 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
                             runSpacing: 8,
                             children: [
                               _buildBadge(_currentStatus!, statusColor),
-                              _buildBadge(ticket['priority'] ?? 'High',
-                                  _priorityColor(ticket['priority'] ?? 'High')),
+                              _buildBadge(
+                                  liveTicket['priority'] as String,
+                                  _priorityColor(
+                                      liveTicket['priority'] as String)),
+                              if ((liveTicket['category'] as String?)
+                                      ?.isNotEmpty ==
+                                  true)
+                                _buildBadge(
+                                    liveTicket['category'] as String,
+                                    AppColors.statusClosed),
                             ],
                           ),
                           const Divider(height: 24),
                           _buildInfoRow(Icons.person_outline_rounded,
-                              'Diajukan oleh', ticket['user'] ?? '-'),
+                              'Diajukan oleh', liveTicket['user'] as String),
                           const SizedBox(height: 8),
                           _buildInfoRow(Icons.calendar_today_outlined,
-                              'Tanggal', ticket['date'] ?? '-'),
+                              'Tanggal', liveTicket['date'] as String),
                           const SizedBox(height: 8),
                           _buildInfoRow(Icons.description_outlined,
-                              'Deskripsi', ticket['description'] ?? '-'),
+                              'Deskripsi',
+                              liveTicket['description'] as String),
                         ],
                       ),
                     ),
                   ),
+
+                  // Attachments (photos from user)
+                  if (attachments.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                'Lampiran (${attachments.length})',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15)),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: 90,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: attachments.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (_, i) {
+                                  final path = attachments[i];
+                                  return ClipRRect(
+                                    borderRadius:
+                                        BorderRadius.circular(10),
+                                    child: Image.file(
+                                      File(path),
+                                      width: 90,
+                                      height: 90,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          _fileThumb(path),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
 
@@ -163,8 +239,6 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
                                   fontWeight: FontWeight.w700,
                                   fontSize: 15)),
                           const SizedBox(height: 14),
-
-                          // Status update
                           const Text('Update Status',
                               style: TextStyle(
                                   fontSize: 12,
@@ -181,10 +255,12 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
                             ]
                                 .map((s) => GestureDetector(
                                       onTap: () =>
-                                          _updateStatus(ticket, s),
+                                          _updateStatus(ticketId, s),
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 14, vertical: 8),
+                                        padding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 8),
                                         decoration: BoxDecoration(
                                           color: _currentStatus == s
                                               ? _statusColor(s)
@@ -200,13 +276,13 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
                                                 color: _currentStatus == s
                                                     ? Colors.white
                                                     : _statusColor(s),
-                                                fontWeight: FontWeight.w600,
+                                                fontWeight:
+                                                    FontWeight.w600,
                                                 fontSize: 12)),
                                       ),
                                     ))
                                 .toList(),
                           ),
-
                           const SizedBox(height: 14),
                           const Text('Tugaskan ke Teknisi',
                               style: TextStyle(
@@ -227,8 +303,11 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
                                 .map((t) => DropdownMenuItem(
                                     value: t, child: Text(t)))
                                 .toList(),
-                            onChanged: (v) =>
-                                setState(() => _assignedTo = v!),
+                            onChanged: (v) {
+                              setState(() => _assignedTo = v!);
+                              TicketStore()
+                                  .assignTechnician(ticketId, v!);
+                            },
                           ),
                         ],
                       ),
@@ -237,12 +316,11 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Comments
                   const Text('Riwayat Komentar',
                       style: TextStyle(
                           fontWeight: FontWeight.w700, fontSize: 15)),
                   const SizedBox(height: 12),
-                  ..._comments.map((c) => _buildComment(c)),
+                  ...comments.map((c) => _buildComment(c)),
                   const SizedBox(height: 80),
                 ],
               ),
@@ -273,13 +351,14 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
                   child: TextField(
                     controller: _replyCtrl,
                     decoration: const InputDecoration(
-                        hintText: 'Tulis balasan admin...', isDense: true),
+                        hintText: 'Tulis balasan admin...',
+                        isDense: true),
                     maxLines: null,
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  onPressed: _sendReply,
+                  onPressed: () => _sendReply(ticketId),
                   style: IconButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     shape: RoundedRectangleBorder(
@@ -293,6 +372,16 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _fileThumb(String path) {
+    return Container(
+      width: 90,
+      height: 90,
+      color: AppColors.primary.withOpacity(0.1),
+      child: const Icon(Icons.insert_drive_file_outlined,
+          color: AppColors.primary),
     );
   }
 
@@ -345,8 +434,7 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
             child: Icon(
               isHelpdesk ? Icons.admin_panel_settings : Icons.person,
               size: 18,
-              color:
-                  isHelpdesk ? AppColors.primary : AppColors.accent,
+              color: isHelpdesk ? AppColors.primary : AppColors.accent,
             ),
           ),
           const SizedBox(width: 10),
@@ -356,10 +444,9 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
               children: [
                 Row(
                   children: [
-                    Text(comment['user'],
+                    Text(comment['user'] as String,
                         style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13)),
+                            fontWeight: FontWeight.w600, fontSize: 13)),
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -370,7 +457,7 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
                             : AppColors.accent.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(comment['role'],
+                      child: Text(comment['role'] as String,
                           style: TextStyle(
                               fontSize: 10,
                               color: isHelpdesk
@@ -389,12 +476,12 @@ class _AdminTicketDetailScreenState extends State<AdminTicketDetailScreen> {
                         : AppColors.backgroundLight,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(comment['message'],
+                  child: Text(comment['message'] as String,
                       style:
                           const TextStyle(fontSize: 13, height: 1.5)),
                 ),
                 const SizedBox(height: 4),
-                Text(comment['time'],
+                Text(comment['time'] as String,
                     style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondaryLight)),

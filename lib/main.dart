@@ -10,10 +10,10 @@ import 'pages/create_ticket_page.dart';
 import 'pages/profile_page.dart';
 
 // Admin pages
-import 'pages/admin/admin_dashboard_page.dart';
-import 'pages/admin/admin_ticket_management_page.dart';
-import 'pages/admin/admin_ticket_detail_page.dart';
-import 'pages/admin/admin_user_management_page.dart';
+import 'pages/admin/dashboard_page.dart';
+import 'pages/admin/ticket_management_page.dart';
+import 'pages/admin/ticket_detail_page.dart';
+import 'pages/admin/user_management_page.dart';
 import 'pages/admin/admin_profile_page.dart';
 
 void main() {

@@ -1,6 +1,8 @@
+// lib/pages/admin/admin_ticket_management_page.dart
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/admin_bottom_nav.dart';
+import '../../services/ticket_store.dart';
 
 class AdminTicketManagementScreen extends StatefulWidget {
   const AdminTicketManagementScreen({super.key});
@@ -17,112 +19,42 @@ class _AdminTicketManagementScreenState
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
 
-  final List<Map<String, dynamic>> _allTickets = [
-    {
-      'id': '#TKT-001',
-      'title': 'Koneksi internet tidak stabil di lab A',
-      'status': 'Open',
-      'user': 'John Doe',
-      'date': '13 Apr 2026',
-      'priority': 'High',
-      'description': 'Koneksi internet di laboratorium A sering putus.',
-      'assignedTo': '-',
-    },
-    {
-      'id': '#TKT-002',
-      'title': 'Printer tidak bisa digunakan di lantai 2',
-      'status': 'In Progress',
-      'user': 'Jane Smith',
-      'date': '12 Apr 2026',
-      'priority': 'Medium',
-      'description': 'Printer lantai 2 tidak terdeteksi.',
-      'assignedTo': 'Teknisi A',
-    },
-    {
-      'id': '#TKT-003',
-      'title': 'Akses sistem akademik error',
-      'status': 'Resolved',
-      'user': 'Budi Santoso',
-      'date': '10 Apr 2026',
-      'priority': 'High',
-      'description': 'Tidak bisa login ke portal akademik.',
-      'assignedTo': 'Teknisi B',
-    },
-    {
-      'id': '#TKT-004',
-      'title': 'Proyektor ruang rapat mati',
-      'status': 'Open',
-      'user': 'Siti Rahayu',
-      'date': '9 Apr 2026',
-      'priority': 'Low',
-      'description': 'Proyektor di ruang rapat tidak menyala.',
-      'assignedTo': '-',
-    },
-    {
-      'id': '#TKT-005',
-      'title': 'Koneksi VPN kampus tidak bisa connect',
-      'status': 'Open',
-      'user': 'Budi Santoso',
-      'date': '22 Mei 2026',
-      'priority': 'High',
-      'description': 'VPN kampus tidak bisa diakses dari luar jaringan.',
-      'assignedTo': '-',
-    },
-    {
-      'id': '#TKT-006',
-      'title': 'Software SPSS tidak bisa diinstall',
-      'status': 'Open',
-      'user': 'Siti Rahayu',
-      'date': '21 Mei 2026',
-      'priority': 'Medium',
-      'description': 'Gagal install SPSS di laptop Windows 11.',
-      'assignedTo': '-',
-    },
-    {
-      'id': '#TKT-007',
-      'title': 'Akun email mahasiswa baru belum aktif',
-      'status': 'In Progress',
-      'user': 'Ahmad Fauzi',
-      'date': '20 Mei 2026',
-      'priority': 'High',
-      'description': 'Email @student.unair.ac.id belum bisa digunakan.',
-      'assignedTo': 'Teknisi C',
-    },
-    {
-      'id': '#TKT-008',
-      'title': 'Email kampus tidak bisa diakses',
-      'status': 'Closed',
-      'user': 'Dewi Lestari',
-      'date': '8 Apr 2026',
-      'priority': 'High',
-      'description': 'Tidak bisa masuk ke email @student.unair.ac.id',
-      'assignedTo': 'Teknisi A',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    TicketStore().addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _searchCtrl.dispose();
+    TicketStore().removeListener(_refresh);
     super.dispose();
   }
 
   List<Map<String, dynamic>> _filtered(String status) {
+    final all = TicketStore().allTickets;
     final list = status == 'All'
-        ? _allTickets
-        : _allTickets.where((t) => t['status'] == status).toList();
+        ? all
+        : all.where((t) => t['status'] == status).toList();
     if (_searchQuery.isEmpty) return list;
     return list
         .where((t) =>
-            t['title'].toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            t['id'].toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            t['user'].toLowerCase().contains(_searchQuery.toLowerCase()))
+            (t['title'] as String)
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()) ||
+            (t['id'] as String)
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()) ||
+            (t['user'] as String)
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()))
         .toList();
   }
 
@@ -151,12 +83,12 @@ class _AdminTicketManagementScreenState
   }
 
   void _showStatusDialog(Map<String, dynamic> ticket) {
-    String selectedStatus = ticket['status'];
+    String selectedStatus = ticket['status'] as String;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
         title: const Text('Update Status Tiket',
             style: TextStyle(fontWeight: FontWeight.w700)),
         content: StatefulBuilder(
@@ -182,7 +114,8 @@ class _AdminTicketManagementScreenState
               child: const Text('Batal')),
           ElevatedButton(
             onPressed: () {
-              setState(() => ticket['status'] = selectedStatus);
+              TicketStore()
+                  .updateStatus(ticket['id'] as String, selectedStatus);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -257,9 +190,12 @@ class _AdminTicketManagementScreenState
       bottomNavigationBar: AdminBottomNav(
         currentIndex: 1,
         onTap: (i) {
-          if (i == 0) Navigator.pushReplacementNamed(context, '/admin-dashboard');
-          if (i == 2) Navigator.pushReplacementNamed(context, '/admin-users');
-          if (i == 3) Navigator.pushReplacementNamed(context, '/admin-profile');
+          if (i == 0)
+            Navigator.pushReplacementNamed(context, '/admin-dashboard');
+          if (i == 2)
+            Navigator.pushReplacementNamed(context, '/admin-users');
+          if (i == 3)
+            Navigator.pushReplacementNamed(context, '/admin-profile');
         },
       ),
     );
@@ -272,10 +208,12 @@ class _AdminTicketManagementScreenState
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.inbox_outlined,
+                size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text('Tidak ada tiket',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 16)),
+                style: TextStyle(
+                    color: Colors.grey.shade500, fontSize: 16)),
           ],
         ),
       );
@@ -286,7 +224,7 @@ class _AdminTicketManagementScreenState
       itemCount: list.length,
       itemBuilder: (_, i) {
         final ticket = list[i];
-        final statusColor = _statusColor(ticket['status']);
+        final statusColor = _statusColor(ticket['status'] as String);
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
@@ -296,7 +234,7 @@ class _AdminTicketManagementScreenState
               children: [
                 Row(
                   children: [
-                    Text(ticket['id'],
+                    Text(ticket['id'] as String,
                         style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -306,20 +244,22 @@ class _AdminTicketManagementScreenState
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: _priorityColor(ticket['priority'])
-                            .withOpacity(0.1),
+                        color:
+                            _priorityColor(ticket['priority'] as String)
+                                .withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(ticket['priority'],
+                      child: Text(ticket['priority'] as String,
                           style: TextStyle(
-                              color: _priorityColor(ticket['priority']),
+                              color: _priorityColor(
+                                  ticket['priority'] as String),
                               fontSize: 11,
                               fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(ticket['title'],
+                Text(ticket['title'] as String,
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 14),
                     maxLines: 2,
@@ -331,7 +271,7 @@ class _AdminTicketManagementScreenState
                         size: 13,
                         color: AppColors.textSecondaryLight),
                     const SizedBox(width: 4),
-                    Text(ticket['user'],
+                    Text(ticket['user'] as String,
                         style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondaryLight)),
@@ -340,7 +280,7 @@ class _AdminTicketManagementScreenState
                         size: 13,
                         color: AppColors.textSecondaryLight),
                     const SizedBox(width: 4),
-                    Text(ticket['date'],
+                    Text(ticket['date'] as String,
                         style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondaryLight)),
@@ -349,7 +289,6 @@ class _AdminTicketManagementScreenState
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    // Status badge
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
@@ -368,7 +307,7 @@ class _AdminTicketManagementScreenState
                                 shape: BoxShape.circle),
                           ),
                           const SizedBox(width: 6),
-                          Text(ticket['status'],
+                          Text(ticket['status'] as String,
                               style: TextStyle(
                                   color: statusColor,
                                   fontSize: 12,
@@ -377,25 +316,26 @@ class _AdminTicketManagementScreenState
                       ),
                     ),
                     const Spacer(),
-                    // Update status button
                     OutlinedButton.icon(
                       onPressed: () => _showStatusDialog(ticket),
                       icon: const Icon(Icons.edit_outlined, size: 14),
-                      label: const Text('Update', style: TextStyle(fontSize: 12)),
+                      label: const Text('Update',
+                          style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
+                        side:
+                            const BorderSide(color: AppColors.primary),
                       ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/admin-ticket-detail',
-                              arguments: ticket),
+                      onPressed: () => Navigator.pushNamed(
+                          context, '/admin-ticket-detail',
+                          arguments: ticket),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),

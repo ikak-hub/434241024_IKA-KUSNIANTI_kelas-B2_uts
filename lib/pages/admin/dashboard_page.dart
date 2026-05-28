@@ -1,9 +1,11 @@
+// lib/pages/admin/admin_dashboard_page.dart
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
+import '../../services/ticket_store.dart';
 import '../../widgets/admin_bottom_nav.dart';
 
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends StatefulWidget {
   final VoidCallback onToggleTheme;
   final ThemeMode themeMode;
 
@@ -14,8 +16,44 @@ class AdminDashboardScreen extends StatelessWidget {
   });
 
   @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    TicketStore().addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    TicketStore().removeListener(_refresh);
+    super.dispose();
+  }
+
+  Color _statusColor(String s) {
+    switch (s) {
+      case 'Open':
+        return AppColors.statusOpen;
+      case 'In Progress':
+        return AppColors.statusInProgress;
+      case 'Resolved':
+        return AppColors.statusResolved;
+      default:
+        return AppColors.statusClosed;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final user = AuthService().currentUser;
+    final store = TicketStore();
+    final pending = store.pendingTickets.take(3).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -23,19 +61,16 @@ class AdminDashboardScreen extends StatelessWidget {
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: Icon(
-              themeMode == ThemeMode.dark
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
-            ),
-            onPressed: onToggleTheme,
+            icon: Icon(widget.themeMode == ThemeMode.dark
+                ? Icons.light_mode_rounded
+                : Icons.dark_mode_rounded),
+            onPressed: widget.onToggleTheme,
           ),
           Stack(
             children: [
               IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                onPressed: () {},
-              ),
+                  icon: const Icon(Icons.notifications_outlined),
+                  onPressed: () {}),
               Positioned(
                 right: 8,
                 top: 8,
@@ -43,9 +78,7 @@ class AdminDashboardScreen extends StatelessWidget {
                   width: 10,
                   height: 10,
                   decoration: const BoxDecoration(
-                    color: AppColors.accent,
-                    shape: BoxShape.circle,
-                  ),
+                      color: AppColors.accent, shape: BoxShape.circle),
                 ),
               ),
             ],
@@ -63,8 +96,7 @@ class AdminDashboardScreen extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF1A3557), Color(0xFF2B5089)],
-                ),
+                    colors: [Color(0xFF1A3557), Color(0xFF2B5089)]),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
@@ -87,10 +119,9 @@ class AdminDashboardScreen extends StatelessWidget {
                         Text(
                           'Halo, ${user?.name ?? 'Admin'} 👋',
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                          ),
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700),
                         ),
                         Container(
                           margin: const EdgeInsets.only(top: 4),
@@ -100,13 +131,11 @@ class AdminDashboardScreen extends StatelessWidget {
                             color: AppColors.accent.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Text(
-                            'Administrator',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600),
-                          ),
+                          child: const Text('Administrator',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600)),
                         ),
                       ],
                     ),
@@ -117,7 +146,6 @@ class AdminDashboardScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // Stats
             Text('Statistik Sistem',
                 style: Theme.of(context)
                     .textTheme
@@ -133,20 +161,23 @@ class AdminDashboardScreen extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               childAspectRatio: 1.15,
               children: [
-                _buildStatCard(context, 'Total Tiket', '47',
+                _buildStatCard(context, 'Total Tiket',
+                    '${store.totalCount}',
                     Icons.confirmation_num_outlined, AppColors.primary),
-                _buildStatCard(context, 'Menunggu', '12',
+                _buildStatCard(context, 'Menunggu',
+                    '${store.openCount}',
                     Icons.hourglass_empty_rounded, AppColors.statusOpen),
-                _buildStatCard(context, 'Diproses', '9',
+                _buildStatCard(context, 'Diproses',
+                    '${store.inProgressCount}',
                     Icons.autorenew_rounded, AppColors.statusInProgress),
-                _buildStatCard(context, 'Total User', '38',
-                    Icons.people_outline_rounded, AppColors.statusResolved),
+                _buildStatCard(context, 'Selesai',
+                    '${store.resolvedCount}',
+                    Icons.check_circle_outline, AppColors.statusResolved),
               ],
             ),
 
             const SizedBox(height: 24),
 
-            // Quick Actions
             Text('Menu Admin',
                 style: Theme.of(context)
                     .textTheme
@@ -162,46 +193,37 @@ class AdminDashboardScreen extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               childAspectRatio: 1.6,
               children: [
-                _buildAdminMenu(
-                  context,
-                  icon: Icons.list_alt_rounded,
-                  label: 'Kelola Tiket',
-                  subtitle: 'Lihat & proses tiket',
-                  color: AppColors.primary,
-                  onTap: () =>
-                      Navigator.pushNamed(context, '/admin-tickets'),
-                ),
-                _buildAdminMenu(
-                  context,
-                  icon: Icons.people_rounded,
-                  label: 'Kelola User',
-                  subtitle: 'Manajemen pengguna',
-                  color: AppColors.statusResolved,
-                  onTap: () =>
-                      Navigator.pushNamed(context, '/admin-users'),
-                ),
-                _buildAdminMenu(
-                  context,
-                  icon: Icons.bar_chart_rounded,
-                  label: 'Laporan',
-                  subtitle: 'Statistik tiket',
-                  color: AppColors.statusInProgress,
-                  onTap: () {},
-                ),
-                _buildAdminMenu(
-                  context,
-                  icon: Icons.settings_rounded,
-                  label: 'Pengaturan',
-                  subtitle: 'Konfigurasi sistem',
-                  color: AppColors.statusClosed,
-                  onTap: () {},
-                ),
+                _buildAdminMenu(context,
+                    icon: Icons.list_alt_rounded,
+                    label: 'Kelola Tiket',
+                    subtitle: 'Lihat & proses tiket',
+                    color: AppColors.primary,
+                    onTap: () =>
+                        Navigator.pushNamed(context, '/admin-tickets')),
+                _buildAdminMenu(context,
+                    icon: Icons.people_rounded,
+                    label: 'Kelola User',
+                    subtitle: 'Manajemen pengguna',
+                    color: AppColors.statusResolved,
+                    onTap: () =>
+                        Navigator.pushNamed(context, '/admin-users')),
+                _buildAdminMenu(context,
+                    icon: Icons.bar_chart_rounded,
+                    label: 'Laporan',
+                    subtitle: 'Statistik tiket',
+                    color: AppColors.statusInProgress,
+                    onTap: () {}),
+                _buildAdminMenu(context,
+                    icon: Icons.settings_rounded,
+                    label: 'Pengaturan',
+                    subtitle: 'Konfigurasi sistem',
+                    color: AppColors.statusClosed,
+                    onTap: () {}),
               ],
             ),
 
             const SizedBox(height: 24),
 
-            // Recent tickets needing action
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -219,31 +241,32 @@ class AdminDashboardScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            ..._pendingTickets.map((t) => _buildTicketItem(context, t)),
+
+            if (pending.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('Tidak ada tiket pending',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                ),
+              )
+            else
+              ...pending.map((t) => _buildTicketItem(context, t)),
           ],
         ),
       ),
       bottomNavigationBar: AdminBottomNav(
         currentIndex: 0,
-        onTap: (i) => _onNavTap(context, i),
+        onTap: (i) {
+          if (i == 1)
+            Navigator.pushNamed(context, '/admin-tickets');
+          if (i == 2)
+            Navigator.pushNamed(context, '/admin-users');
+          if (i == 3)
+            Navigator.pushNamed(context, '/admin-profile');
+        },
       ),
     );
-  }
-
-  void _onNavTap(BuildContext context, int index) {
-    switch (index) {
-      case 0:
-        break;
-      case 1:
-        Navigator.pushNamed(context, '/admin-tickets');
-        break;
-      case 2:
-        Navigator.pushNamed(context, '/admin-users');
-        break;
-      case 3:
-        Navigator.pushNamed(context, '/admin-profile');
-        break;
-    }
   }
 
   Widget _buildStatCard(BuildContext context, String label, String count,
@@ -313,8 +336,9 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTicketItem(BuildContext context, Map<String, dynamic> ticket) {
-    final Color statusColor = _statusColor(ticket['status']);
+  Widget _buildTicketItem(
+      BuildContext context, Map<String, dynamic> ticket) {
+    final statusColor = _statusColor(ticket['status'] as String);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
@@ -330,9 +354,9 @@ class AdminDashboardScreen extends StatelessWidget {
           child: Icon(Icons.confirmation_num_outlined,
               color: statusColor, size: 20),
         ),
-        title: Text(ticket['title'],
-            style:
-                const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        title: Text(ticket['title'] as String,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 14),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
         subtitle: Column(
@@ -344,29 +368,29 @@ class AdminDashboardScreen extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text(ticket['status'],
+                  child: Text(ticket['status'] as String,
                       style: TextStyle(
                           color: statusColor,
                           fontSize: 10,
                           fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(width: 8),
-                Text(ticket['date'],
+                Text(ticket['date'] as String,
                     style: const TextStyle(fontSize: 10)),
               ],
             ),
           ],
         ),
         trailing: ElevatedButton(
-          onPressed: () =>
-              Navigator.pushNamed(context, '/admin-ticket-detail',
-                  arguments: ticket),
+          onPressed: () => Navigator.pushNamed(
+              context, '/admin-ticket-detail',
+              arguments: ticket),
           style: ElevatedButton.styleFrom(
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -381,47 +405,4 @@ class AdminDashboardScreen extends StatelessWidget {
       ),
     );
   }
-
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'Open':
-        return AppColors.statusOpen;
-      case 'In Progress':
-        return AppColors.statusInProgress;
-      case 'Resolved':
-        return AppColors.statusResolved;
-      default:
-        return AppColors.statusClosed;
-    }
-  }
-
-  final List<Map<String, dynamic>> _pendingTickets = const [
-    {
-      'id': '#TKT-005',
-      'title': 'Koneksi VPN kampus tidak bisa connect',
-      'status': 'Open',
-      'user': 'Budi Santoso',
-      'date': '22 Mei 2026',
-      'priority': 'High',
-      'description': 'VPN kampus tidak bisa diakses dari luar jaringan.',
-    },
-    {
-      'id': '#TKT-006',
-      'title': 'Software SPSS tidak bisa diinstall',
-      'status': 'Open',
-      'user': 'Siti Rahayu',
-      'date': '21 Mei 2026',
-      'priority': 'Medium',
-      'description': 'Gagal install SPSS di laptop Windows 11.',
-    },
-    {
-      'id': '#TKT-007',
-      'title': 'Akun email mahasiswa baru belum aktif',
-      'status': 'In Progress',
-      'user': 'Ahmad Fauzi',
-      'date': '20 Mei 2026',
-      'priority': 'High',
-      'description': 'Email @student.unair.ac.id belum bisa digunakan.',
-    },
-  ];
 }

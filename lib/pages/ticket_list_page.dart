@@ -1,6 +1,9 @@
+// lib/pages/ticket_list_page.dart
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
+import '../services/auth_service.dart';
+import '../services/ticket_store.dart';
 
 class TicketListScreen extends StatefulWidget {
   const TicketListScreen({super.key});
@@ -15,71 +18,45 @@ class _TicketListScreenState extends State<TicketListScreen>
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
 
-  final List<Map<String, dynamic>> _allTickets = [
-    {
-      'id': '#TKT-001',
-      'title': 'Koneksi internet tidak stabil di lab A',
-      'status': 'Open',
-      'date': '13 Apr 2026',
-      'priority': 'High',
-      'description': 'Koneksi internet di laboratorium A sering putus.',
-    },
-    {
-      'id': '#TKT-002',
-      'title': 'Printer tidak bisa digunakan di lantai 2',
-      'status': 'In Progress',
-      'date': '12 Apr 2026',
-      'priority': 'Medium',
-      'description': 'Printer lantai 2 tidak terdeteksi oleh komputer.',
-    },
-    {
-      'id': '#TKT-003',
-      'title': 'Akses sistem akademik error',
-      'status': 'Resolved',
-      'date': '10 Apr 2026',
-      'priority': 'High',
-      'description': 'Tidak bisa login ke portal akademik.',
-    },
-    {
-      'id': '#TKT-004',
-      'title': 'Proyektor ruang rapat mati',
-      'status': 'Open',
-      'date': '9 Apr 2026',
-      'priority': 'Low',
-      'description': 'Proyektor di ruang rapat tidak menyala.',
-    },
-    {
-      'id': '#TKT-005',
-      'title': 'Email kampus tidak bisa diakses',
-      'status': 'Closed',
-      'date': '8 Apr 2026',
-      'priority': 'High',
-      'description': 'Tidak bisa masuk ke email @student.unair.ac.id',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    // Listen to store changes
+    TicketStore().addListener(_onStoreChange);
+  }
+
+  void _onStoreChange() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _searchCtrl.dispose();
+    TicketStore().removeListener(_onStoreChange);
     super.dispose();
   }
 
   List<Map<String, dynamic>> _filtered(String status) {
+    final user = AuthService().currentUser;
+    final base = user != null
+        ? TicketStore().ticketsForUser(user.id)
+        : TicketStore().allTickets;
+
     final list = status == 'All'
-        ? _allTickets
-        : _allTickets.where((t) => t['status'] == status).toList();
+        ? base
+        : base.where((t) => t['status'] == status).toList();
+
     if (_searchQuery.isEmpty) return list;
     return list
         .where((t) =>
-            t['title'].toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            t['id'].toLowerCase().contains(_searchQuery.toLowerCase()))
+            (t['title'] as String)
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()) ||
+            (t['id'] as String)
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()))
         .toList();
   }
 
@@ -129,7 +106,6 @@ class _TicketListScreenState extends State<TicketListScreen>
       ),
       body: Column(
         children: [
-          // Search Bar
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -150,8 +126,6 @@ class _TicketListScreenState extends State<TicketListScreen>
               ),
             ),
           ),
-
-          // Tabs Content
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -187,12 +161,12 @@ class _TicketListScreenState extends State<TicketListScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.inbox_outlined,
+                size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
-            Text(
-              'Tidak ada tiket',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
-            ),
+            Text('Tidak ada tiket',
+                style: TextStyle(
+                    color: Colors.grey.shade500, fontSize: 16)),
           ],
         ),
       );
@@ -203,10 +177,12 @@ class _TicketListScreenState extends State<TicketListScreen>
       itemCount: list.length,
       itemBuilder: (_, i) {
         final ticket = list[i];
+        final statusColor = _statusColor(ticket['status'] as String);
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: InkWell(
-            onTap: () => Navigator.pushNamed(context, '/ticket-detail',
+            onTap: () => Navigator.pushNamed(
+                context, '/ticket-detail',
                 arguments: ticket),
             borderRadius: BorderRadius.circular(16),
             child: Padding(
@@ -216,54 +192,49 @@ class _TicketListScreenState extends State<TicketListScreen>
                 children: [
                   Row(
                     children: [
-                      Text(
-                        ticket['id'],
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondaryLight,
-                        ),
-                      ),
+                      Text(ticket['id'] as String,
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondaryLight)),
                       const Spacer(),
-                      // Priority Badge
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: _priorityColor(ticket['priority'])
+                          color: _priorityColor(ticket['priority'] as String)
                               .withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(
-                          ticket['priority'],
-                          style: TextStyle(
-                            color: _priorityColor(ticket['priority']),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: Text(ticket['priority'] as String,
+                            style: TextStyle(
+                                color: _priorityColor(
+                                    ticket['priority'] as String),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    ticket['title'],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 12),
+                  Text(ticket['title'] as String,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 15),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  if ((ticket['category'] as String?)?.isNotEmpty == true)
+                    Text(ticket['category'] as String,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondaryLight)),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
-                      // Status badge
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: _statusColor(ticket['status']).withOpacity(0.1),
+                          color: statusColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -273,19 +244,15 @@ class _TicketListScreenState extends State<TicketListScreen>
                               width: 6,
                               height: 6,
                               decoration: BoxDecoration(
-                                color: _statusColor(ticket['status']),
-                                shape: BoxShape.circle,
-                              ),
+                                  color: statusColor,
+                                  shape: BoxShape.circle),
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              ticket['status'],
-                              style: TextStyle(
-                                color: _statusColor(ticket['status']),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            Text(ticket['status'] as String,
+                                style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ),
@@ -293,13 +260,10 @@ class _TicketListScreenState extends State<TicketListScreen>
                       Icon(Icons.calendar_today_outlined,
                           size: 12, color: Colors.grey.shade500),
                       const SizedBox(width: 4),
-                      Text(
-                        ticket['date'],
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
+                      Text(ticket['date'] as String,
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500)),
                     ],
                   ),
                 ],

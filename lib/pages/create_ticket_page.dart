@@ -1,5 +1,10 @@
+// lib/pages/create_ticket_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
+import '../services/ticket_store.dart';
 
 class CreateTicketScreen extends StatefulWidget {
   const CreateTicketScreen({super.key});
@@ -14,8 +19,12 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   final _descCtrl = TextEditingController();
   String _selectedCategory = 'Jaringan / Internet';
   String _selectedPriority = 'Medium';
-  final List<String> _attachments = [];
+
+  /// Stores picked image/file paths
+  final List<_Attachment> _attachments = [];
   bool _isLoading = false;
+
+  final ImagePicker _picker = ImagePicker();
 
   final List<String> _categories = [
     'Jaringan / Internet',
@@ -32,29 +41,86 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     {'label': 'High', 'color': Colors.red, 'icon': Icons.arrow_upward},
   ];
 
-  void _addAttachment(String source) {
-    setState(() {
-      _attachments.add(source == 'camera' ? 'foto_${_attachments.length + 1}.jpg' : 'file_${_attachments.length + 1}.pdf');
-    });
+  // ── Attachment helpers ─────────────────────────────────────
+
+  Future<void> _pickFromCamera() async {
     Navigator.pop(context);
+    try {
+      final XFile? photo =
+          await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+      if (photo != null) {
+        setState(() => _attachments.add(_Attachment(path: photo.path, isImage: true)));
+      }
+    } catch (e) {
+      _showError('Tidak dapat mengakses kamera: $e');
+    }
   }
 
-  void _submitTicket() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) {
-        setState(() => _isLoading = false);
-        _showSuccessDialog();
+  Future<void> _pickFromGallery() async {
+    Navigator.pop(context);
+    try {
+      final List<XFile> images = await _picker.pickMultiImage(imageQuality: 80);
+      if (images.isNotEmpty) {
+        setState(() {
+          for (final img in images) {
+            _attachments.add(_Attachment(path: img.path, isImage: true));
+          }
+        });
       }
+    } catch (e) {
+      _showError('Tidak dapat mengakses galeri: $e');
+    }
+  }
+
+  /// For non-image files we simulate (image_picker doesn't support general files;
+  /// in production swap with file_picker package)
+  Future<void> _pickFile() async {
+    Navigator.pop(context);
+    _showError(
+        'Untuk memilih file dokumen, gunakan package file_picker.\nSaat ini hanya foto yang didukung.');
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+  }
+
+  void _removeAttachment(int index) {
+    setState(() => _attachments.removeAt(index));
+  }
+
+  // ── Submit ─────────────────────────────────────────────────
+
+  void _submitTicket() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    await Future.delayed(const Duration(milliseconds: 800)); // slight delay UX
+
+    final user = AuthService().currentUser;
+    TicketStore().createTicket(
+      userId: user?.id ?? '2',
+      userName: user?.name ?? 'John Doe',
+      title: _titleCtrl.text.trim(),
+      category: _selectedCategory,
+      priority: _selectedPriority,
+      description: _descCtrl.text.trim(),
+      attachments: _attachments.map((a) => a.path).toList(),
+    );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      _showSuccessDialog();
     }
   }
 
   void _showSuccessDialog() {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -78,14 +144,15 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             const Text(
               'Tiket Anda telah dikirim dan akan segera diproses oleh tim helpdesk.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondaryLight, fontSize: 13),
+              style: TextStyle(
+                  color: AppColors.textSecondaryLight, fontSize: 13),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // close dialog
                   Navigator.pushReplacementNamed(context, '/tickets');
                 },
                 child: const Text('Lihat Tiket Saya'),
@@ -107,10 +174,9 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Tambah Lampiran',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            ),
+            const Text('Tambah Lampiran',
+                style:
+                    TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -119,19 +185,19 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                   icon: Icons.camera_alt_rounded,
                   label: 'Kamera',
                   color: AppColors.primary,
-                  onTap: () => _addAttachment('camera'),
+                  onTap: _pickFromCamera,
                 ),
                 _buildAttachOption(
                   icon: Icons.photo_library_rounded,
                   label: 'Galeri',
                   color: AppColors.accent,
-                  onTap: () => _addAttachment('gallery'),
+                  onTap: _pickFromGallery,
                 ),
                 _buildAttachOption(
                   icon: Icons.insert_drive_file_rounded,
                   label: 'File',
                   color: AppColors.statusInProgress,
-                  onTap: () => _addAttachment('file'),
+                  onTap: _pickFile,
                 ),
               ],
             ),
@@ -169,6 +235,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     );
   }
 
+  // ── Build ──────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -192,7 +260,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.statusOpen.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.statusOpen.withOpacity(0.3)),
+                  border: Border.all(
+                      color: AppColors.statusOpen.withOpacity(0.3)),
                 ),
                 child: const Row(
                   children: [
@@ -220,7 +289,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                   hintText: 'Deskripsi singkat masalah Anda',
                   prefixIcon: Icon(Icons.title_rounded),
                 ),
-                validator: (v) => v!.isEmpty ? 'Judul tidak boleh kosong' : null,
+                validator: (v) =>
+                    v!.isEmpty ? 'Judul tidak boleh kosong' : null,
               ),
               const SizedBox(height: 16),
 
@@ -228,7 +298,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               _buildLabel('Kategori *'),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                initialValue: _selectedCategory,
+                value: _selectedCategory,
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.category_outlined),
                 ),
@@ -243,21 +313,23 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               _buildLabel('Prioritas *'),
               const SizedBox(height: 8),
               Row(
-                children: _priorities.map((p) {
+                children: _priorities.asMap().entries.map((entry) {
+                  final p = entry.value;
+                  final isLast = entry.key == _priorities.length - 1;
                   final isSelected = _selectedPriority == p['label'];
                   return Expanded(
                     child: GestureDetector(
                       onTap: () =>
                           setState(() => _selectedPriority = p['label']),
                       child: Container(
-                        margin: EdgeInsets.only(
-                          right: p['label'] != 'High' ? 8 : 0,
-                        ),
+                        margin: EdgeInsets.only(right: isLast ? 0 : 8),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: isSelected
                               ? (p['color'] as Color).withOpacity(0.15)
-                              : Theme.of(context).inputDecorationTheme.fillColor,
+                              : Theme.of(context)
+                                  .inputDecorationTheme
+                                  .fillColor,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isSelected
@@ -317,14 +389,14 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                   decoration: BoxDecoration(
                     border: Border.all(
                       color: AppColors.primary.withOpacity(0.4),
-                      style: BorderStyle.solid,
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.attach_file_rounded, color: AppColors.primary),
+                      Icon(Icons.attach_file_rounded,
+                          color: AppColors.primary),
                       SizedBox(width: 8),
                       Text(
                         'Tambah Lampiran (Foto / File)',
@@ -338,32 +410,63 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                 ),
               ),
 
-              // Daftar lampiran
+              // Preview lampiran
               if (_attachments.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _attachments
-                      .map((a) => Chip(
-                            label: Text(a, style: const TextStyle(fontSize: 12)),
-                            avatar: Icon(
-                              a.endsWith('.jpg')
-                                  ? Icons.image_outlined
-                                  : Icons.insert_drive_file_outlined,
-                              size: 16,
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 90,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _attachments.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final att = _attachments[i];
+                      return Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: att.isImage
+                                ? Image.file(
+                                    File(att.path),
+                                    width: 90,
+                                    height: 90,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        _fileThumb(att.path),
+                                  )
+                                : _fileThumb(att.path),
+                          ),
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: GestureDetector(
+                              onTap: () => _removeAttachment(i),
+                              child: Container(
+                                decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.close,
+                                    color: Colors.white, size: 16),
+                              ),
                             ),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () =>
-                                setState(() => _attachments.remove(a)),
-                          ))
-                      .toList(),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                Text(
+                  '${_attachments.length} lampiran dipilih',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondaryLight),
                 ),
               ],
 
               const SizedBox(height: 32),
 
-              // Submit Button
+              // Submit
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -393,12 +496,38 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     );
   }
 
-  Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+  Widget _fileThumb(String path) {
+    return Container(
+      width: 90,
+      height: 90,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.insert_drive_file_outlined,
+              color: AppColors.primary, size: 28),
+          const SizedBox(height: 4),
+          Text(
+            path.split('/').last.split('\\').last,
+            style:
+                const TextStyle(fontSize: 9, color: AppColors.primary),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
+
+  Widget _buildLabel(String text) => Text(
+        text,
+        style:
+            const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      );
 
   @override
   void dispose() {
@@ -406,4 +535,10 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     _descCtrl.dispose();
     super.dispose();
   }
+}
+
+class _Attachment {
+  final String path;
+  final bool isImage;
+  _Attachment({required this.path, required this.isImage});
 }
