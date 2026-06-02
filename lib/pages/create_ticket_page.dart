@@ -298,7 +298,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               _buildLabel('Kategori *'),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.category_outlined),
                 ),
@@ -418,7 +418,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: _attachments.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (_, i) {
                       final att = _attachments[i];
                       return Stack(
@@ -431,7 +431,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                                     width: 90,
                                     height: 90,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
+                                    errorBuilder: (_, _, _) =>
                                         _fileThumb(att.path),
                                   )
                                 : _fileThumb(att.path),

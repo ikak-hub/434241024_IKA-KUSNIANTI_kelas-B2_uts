@@ -190,12 +190,15 @@ class _AdminTicketManagementScreenState
       bottomNavigationBar: AdminBottomNav(
         currentIndex: 1,
         onTap: (i) {
-          if (i == 0)
+          if (i == 0) {
             Navigator.pushReplacementNamed(context, '/admin-dashboard');
-          if (i == 2)
+          }
+          if (i == 2) {
             Navigator.pushReplacementNamed(context, '/admin-users');
-          if (i == 3)
+          }
+          if (i == 3) {
             Navigator.pushReplacementNamed(context, '/admin-profile');
+          }
         },
       ),
     );

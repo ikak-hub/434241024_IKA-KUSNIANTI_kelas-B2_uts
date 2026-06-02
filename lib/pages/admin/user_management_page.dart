@@ -328,12 +328,15 @@ class _AdminUserManagementScreenState
       bottomNavigationBar: AdminBottomNav(
         currentIndex: 2,
         onTap: (i) {
-          if (i == 0)
+          if (i == 0) {
             Navigator.pushReplacementNamed(context, '/admin-dashboard');
-          if (i == 1)
+          }
+          if (i == 1) {
             Navigator.pushReplacementNamed(context, '/admin-tickets');
-          if (i == 3)
+          }
+          if (i == 3) {
             Navigator.pushReplacementNamed(context, '/admin-profile');
+          }
         },
       ),
     );

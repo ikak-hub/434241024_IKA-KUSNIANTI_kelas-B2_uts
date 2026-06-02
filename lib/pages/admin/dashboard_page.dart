@@ -258,12 +258,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       bottomNavigationBar: AdminBottomNav(
         currentIndex: 0,
         onTap: (i) {
-          if (i == 1)
+          if (i == 1) {
             Navigator.pushNamed(context, '/admin-tickets');
-          if (i == 2)
+          }
+          if (i == 2) {
             Navigator.pushNamed(context, '/admin-users');
-          if (i == 3)
+          }
+          if (i == 3) {
             Navigator.pushNamed(context, '/admin-profile');
+          }
         },
       ),
     );

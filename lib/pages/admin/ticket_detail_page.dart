@@ -200,7 +200,7 @@ class _AdminTicketDetailScreenState
                               child: ListView.separated(
                                 scrollDirection: Axis.horizontal,
                                 itemCount: attachments.length,
-                                separatorBuilder: (_, __) =>
+                                separatorBuilder: (_, _) =>
                                     const SizedBox(width: 8),
                                 itemBuilder: (_, i) {
                                   final path = attachments[i];
@@ -212,7 +212,7 @@ class _AdminTicketDetailScreenState
                                       width: 90,
                                       height: 90,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) =>
+                                      errorBuilder: (_, _, _) =>
                                           _fileThumb(path),
                                     ),
                                   );
@@ -290,7 +290,7 @@ class _AdminTicketDetailScreenState
                                   fontWeight: FontWeight.w600)),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
-                            value: _assignedTo,
+                            initialValue: _assignedTo,
                             decoration: const InputDecoration(
                               prefixIcon: Icon(
                                   Icons.engineering_outlined,

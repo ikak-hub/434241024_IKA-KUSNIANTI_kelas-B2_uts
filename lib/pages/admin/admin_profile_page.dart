@@ -191,12 +191,15 @@ class AdminProfileScreen extends StatelessWidget {
       bottomNavigationBar: AdminBottomNav(
         currentIndex: 3,
         onTap: (i) {
-          if (i == 0)
+          if (i == 0) {
             Navigator.pushReplacementNamed(context, '/admin-dashboard');
-          if (i == 1)
+          }
+          if (i == 1) {
             Navigator.pushReplacementNamed(context, '/admin-tickets');
-          if (i == 2)
+          }
+          if (i == 2) {
             Navigator.pushReplacementNamed(context, '/admin-users');
+          }
         },
       ),
     );
