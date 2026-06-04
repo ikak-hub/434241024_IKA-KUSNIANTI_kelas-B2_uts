@@ -1,25 +1,21 @@
-// lib/pages/dashboard_page.dart
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../widgets/bottom_nav.dart';
 import '../services/auth_service.dart';
 import '../services/ticket_store.dart';
 
-class DashboardScreen extends StatefulWidget {
+class UserDashboardScreen extends StatefulWidget {
   final VoidCallback onToggleTheme;
   final ThemeMode themeMode;
-
-  const DashboardScreen({
-    super.key,
-    required this.onToggleTheme,
-    required this.themeMode,
-  });
+  const UserDashboardScreen(
+      {super.key, required this.onToggleTheme, required this.themeMode});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<UserDashboardScreen> createState() => _UserDashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _UserDashboardScreenState extends State<UserDashboardScreen> {
+  int _currentIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -36,24 +32,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
+  Color _flowColor(String fs) {
+    switch (fs) {
+      case 'pending_approval':
+        return AppColors.statusPending;
+      case 'approved':
+        return AppColors.statusOpen;
+      case 'assigned_helpdesk':
+        return AppColors.roleHelpdesk;
+      case 'assigned_technical':
+        return AppColors.accent;
+      case 'in_progress':
+        return AppColors.statusInProgress;
+      case 'resolved':
+        return AppColors.statusResolved;
+      case 'rejected':
+        return AppColors.statusRejected;
+      default:
+        return AppColors.statusClosed;
+    }
+  }
+
+  String _flowLabel(String fs) {
+    switch (fs) {
+      case 'pending_approval':
+        return 'Menunggu Approval';
+      case 'approved':
+        return 'Disetujui';
+      case 'assigned_helpdesk':
+        return 'Di Helpdesk';
+      case 'assigned_technical':
+        return 'Di Teknisi';
+      case 'in_progress':
+        return 'Sedang Dikerjakan';
+      case 'resolved':
+        return 'Selesai';
+      case 'rejected':
+        return 'Ditolak';
+      default:
+        return fs;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = AuthService().currentUser;
     final store = TicketStore();
-    final myTickets = user != null
-        ? store.ticketsForUser(user.id)
-        : <Map<String, dynamic>>[];
-    final totalMy = myTickets.length;
-    final openMy = myTickets.where((t) => t['status'] == 'Open').length;
-    final inProgressMy =
-        myTickets.where((t) => t['status'] == 'In Progress').length;
-    final resolvedMy =
-        myTickets.where((t) => t['status'] == 'Resolved').length;
-    final recentTickets = myTickets.take(3).toList();
+    final user = AuthService().currentUser!;
+    final myTickets = store.ticketsForUser(user.id);
+
+    final pages = [
+      _buildHome(myTickets, user),
+      _buildTicketList(myTickets),
+      _buildCreateTicket(user),
+    ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard'),
+        title: const Text('E-Ticketing Helpdesk'),
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
@@ -62,322 +97,540 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : Icons.dark_mode_rounded),
             onPressed: widget.onToggleTheme,
           ),
-          Stack(
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: () {
+              AuthService().logout();
+              Navigator.pushReplacementNamed(context, '/login');
+            },
+          ),
+        ],
+      ),
+      body: pages[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        items: const [
+          BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home_rounded),
+              label: 'Beranda'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.confirmation_num_outlined),
+              activeIcon: Icon(Icons.confirmation_num_rounded),
+              label: 'Tiket Saya'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.add_circle_outline_rounded),
+              activeIcon: Icon(Icons.add_circle_rounded),
+              label: 'Buat Tiket'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHome(List<Map<String, dynamic>> myTickets, user) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                  colors: [AppColors.primary, AppColors.primaryLight]),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.person,
+                          color: Colors.white, size: 26),
+                    ),
+                    const SizedBox(width: 12),
+                    Text('Halo, ${user.name} 👋',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                    'Layanan helpdesk siap membantu permasalahan IT Anda.',
+                    style:
+                        TextStyle(color: Colors.white70, fontSize: 13)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Alur
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.statusOpen.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppColors.statusOpen.withOpacity(0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Alur Layanan',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13)),
+                const SizedBox(height: 8),
+                _flowStep('1', 'Buat Tiket', 'Ajukan permasalahan Anda',
+                    AppColors.primary),
+                _flowStep('2', 'Approval Admin',
+                    'Admin meninjau & menyetujui', AppColors.statusPending),
+                _flowStep('3', 'Helpdesk',
+                    'Helpdesk mengkaji & meneruskan', AppColors.roleHelpdesk),
+                _flowStep('4', 'Technical Support',
+                    'Teknisi menangani masalah', AppColors.roleTech),
+                _flowStep('5', 'Selesai',
+                    'Masalah terselesaikan', AppColors.statusResolved,
+                    isLast: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Stats
+          Row(
             children: [
-              IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
-                  onPressed: () {}),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: const BoxDecoration(
-                      color: AppColors.accent, shape: BoxShape.circle),
+              _miniStat('Total', '${myTickets.length}', AppColors.primary),
+              const SizedBox(width: 10),
+              _miniStat(
+                  'Proses',
+                  '${myTickets.where((t) => t['flowStatus'] != 'resolved' && t['flowStatus'] != 'rejected').length}',
+                  AppColors.statusInProgress),
+              const SizedBox(width: 10),
+              _miniStat(
+                  'Selesai',
+                  '${myTickets.where((t) => t['flowStatus'] == 'resolved').length}',
+                  AppColors.statusResolved),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Tiket Terbaru',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 16)),
+              TextButton(
+                onPressed: () => setState(() => _currentIndex = 1),
+                child: const Text('Lihat Semua',
+                    style: TextStyle(color: AppColors.accent)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          if (myTickets.isEmpty)
+            Center(
+              child: Column(
+                children: [
+                  const Icon(Icons.inbox_outlined,
+                      size: 48, color: AppColors.textSecondaryLight),
+                  const SizedBox(height: 8),
+                  const Text('Belum ada tiket'),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () => setState(() => _currentIndex = 2),
+                    child: const Text('Buat Tiket Sekarang'),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...myTickets.take(3).map((t) => _ticketItem(t)),
+        ],
+      ),
+    );
+  }
+
+  Widget _flowStep(
+      String num, String title, String desc, Color color,
+      {bool isLast = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                  color: color, shape: BoxShape.circle),
+              child: Center(
+                child: Text(num,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ),
+            if (!isLast)
+              Container(
+                  width: 2, height: 24, color: color.withOpacity(0.3)),
+          ],
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        color: color)),
+                Text(desc,
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondaryLight)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTicketList(List<Map<String, dynamic>> myTickets) {
+    if (myTickets.isEmpty) {
+      return const Center(child: Text('Belum ada tiket'));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: myTickets.length,
+      itemBuilder: (_, i) => _ticketItem(myTickets[i]),
+    );
+  }
+
+  Widget _ticketItem(Map<String, dynamic> ticket) {
+    final fs = ticket['flowStatus'] as String;
+    final fc = _flowColor(fs);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(ticket['id'] as String,
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondaryLight,
+                        fontWeight: FontWeight.w600)),
+                const Spacer(),
+                _badge(_flowLabel(fs), fc),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(ticket['title'] as String,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 14),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Text('${ticket['category']} · ${ticket['date']}',
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondaryLight)),
+            if (ticket['assignedTechName'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                    'Ditangani: ${ticket['assignedTechName']}',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.roleTech,
+                        fontWeight: FontWeight.w600)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreateTicket(user) {
+    final formKey = GlobalKey<FormState>();
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String category = 'Jaringan / Internet';
+    String priority = 'Medium';
+    bool isLoading = false;
+
+    return StatefulBuilder(
+      builder: (ctx, setS) => Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.statusOpen.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.statusOpen.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: AppColors.statusOpen, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tiket Anda akan dikaji oleh admin terlebih dahulu sebelum ditangani.',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.statusOpen),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              const Text('Judul Keluhan *',
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(
+                    hintText: 'Deskripsi singkat masalah Anda',
+                    prefixIcon: Icon(Icons.title_rounded)),
+                validator: (v) =>
+                    v!.isEmpty ? 'Judul wajib diisi' : null,
+              ),
+              const SizedBox(height: 16),
+
+              const Text('Kategori *',
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: category,
+                decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.category_outlined)),
+                items: [
+                  'Jaringan / Internet',
+                  'Printer / Scanner',
+                  'Komputer / Hardware',
+                  'Sistem / Software',
+                  'Email / Akun',
+                  'Lainnya',
+                ]
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setS(() => category = v!),
+              ),
+              const SizedBox(height: 16),
+
+              const Text('Prioritas *',
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  for (final p in [
+                    {'label': 'Low', 'color': Colors.green},
+                    {'label': 'Medium', 'color': Colors.orange},
+                    {'label': 'High', 'color': Colors.red},
+                  ])
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setS(() => priority = p['label'] as String),
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: priority == p['label']
+                                ? (p['color'] as Color).withOpacity(0.15)
+                                : null,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: priority == p['label']
+                                  ? p['color'] as Color
+                                  : Colors.grey.shade300,
+                              width: priority == p['label'] ? 2 : 1,
+                            ),
+                          ),
+                          child: Text(p['label'] as String,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: p['color'] as Color,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              const Text('Deskripsi Detail *',
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: descCtrl,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                    hintText:
+                        'Jelaskan masalah secara detail, kapan terjadi, dampaknya, dsb.'),
+                validator: (v) =>
+                    v!.isEmpty ? 'Deskripsi wajib diisi' : null,
+              ),
+              const SizedBox(height: 28),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
+                          setS(() => isLoading = true);
+                          await Future.delayed(
+                              const Duration(milliseconds: 800));
+                          TicketStore().createTicket(
+                            userId: user.id,
+                            userName: user.name,
+                            title: titleCtrl.text.trim(),
+                            category: category,
+                            priority: priority,
+                            description: descCtrl.text.trim(),
+                          );
+                          setS(() => isLoading = false);
+                          if (ctx.mounted) {
+                            showDialog(
+                              context: ctx,
+                              builder: (_) => AlertDialog(
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(20)),
+                                content: const Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_rounded,
+                                        color: AppColors.statusResolved,
+                                        size: 56),
+                                    SizedBox(height: 12),
+                                    Text('Tiket Berhasil Dibuat!',
+                                        style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w700)),
+                                    SizedBox(height: 8),
+                                    Text(
+                                        'Tiket Anda akan segera ditinjau oleh admin.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: AppColors
+                                                .textSecondaryLight)),
+                                  ],
+                                ),
+                                actions: [
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        setState(
+                                            () => _currentIndex = 1);
+                                      },
+                                      child:
+                                          const Text('Lihat Tiket Saya'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                        },
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.send_rounded, size: 18),
+                            SizedBox(width: 8),
+                            Text('Kirim Tiket'),
+                          ],
+                        ),
                 ),
               ),
             ],
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Greeting Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                    colors: [AppColors.primary, AppColors.primaryLight]),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.person,
-                            color: Colors.white, size: 26),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Halo, ${user?.name ?? 'User'} 👋',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700),
-                          ),
-                          const Text('User • Aktif',
-                              style: TextStyle(
-                                  color: Colors.white70, fontSize: 13)),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Pantau tiket Anda dengan mudah',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 13)),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Text('Ringkasan Tiket',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-
-            GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 1.2,
-              children: [
-                _buildStatCard(context, 'Total Tiket',
-                    '$totalMy', Icons.confirmation_num_outlined,
-                    AppColors.primary),
-                _buildStatCard(context, 'Open', '$openMy',
-                    Icons.radio_button_unchecked, AppColors.statusOpen),
-                _buildStatCard(context, 'In Progress', '$inProgressMy',
-                    Icons.autorenew_rounded, AppColors.statusInProgress),
-                _buildStatCard(context, 'Resolved', '$resolvedMy',
-                    Icons.check_circle_outline, AppColors.statusResolved),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            Text('Aksi Cepat',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _buildQuickAction(context,
-                      icon: Icons.add_circle_outline_rounded,
-                      label: 'Buat Tiket',
-                      color: AppColors.accent,
-                      onTap: () =>
-                          Navigator.pushNamed(context, '/create-ticket')),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildQuickAction(context,
-                      icon: Icons.list_alt_rounded,
-                      label: 'Lihat Tiket',
-                      color: AppColors.primary,
-                      onTap: () =>
-                          Navigator.pushNamed(context, '/tickets')),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Tiket Terbaru',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                TextButton(
-                  onPressed: () =>
-                      Navigator.pushNamed(context, '/tickets'),
-                  child: const Text('Lihat Semua',
-                      style: TextStyle(color: AppColors.accent)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            if (recentTickets.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Icon(Icons.inbox_outlined,
-                          size: 48, color: Colors.grey.shade400),
-                      const SizedBox(height: 8),
-                      Text('Belum ada tiket',
-                          style: TextStyle(color: Colors.grey.shade500)),
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pushNamed(
-                            context, '/create-ticket'),
-                        child: const Text('Buat Tiket Pertama'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              ...recentTickets
-                  .map((t) => _buildTicketItem(context, t)),
-          ],
-        ),
-      ),
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: 0,
-        onTap: (i) {
-          if (i == 1) Navigator.pushNamed(context, '/tickets');
-          if (i == 2) Navigator.pushNamed(context, '/profile');
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accent,
-        onPressed: () => Navigator.pushNamed(context, '/create-ticket'),
-        child: const Icon(Icons.add_rounded, color: Colors.white),
-      ),
-    );
-  }
-
-  Widget _buildStatCard(BuildContext context, String label, String count,
-      IconData icon, Color color) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(icon, color: color, size: 28),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(count,
-                    style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        color: color)),
-                Text(label, style: const TextStyle(fontSize: 12)),
-              ],
-            ),
-          ],
         ),
       ),
     );
   }
 
-  Widget _buildQuickAction(BuildContext context,
-      {required IconData icon,
-      required String label,
-      required Color color,
-      required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+  Widget _miniStat(String label, String val, Color color) {
+    return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withOpacity(0.2)),
         ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 8),
-            Text(label,
+            Text(val,
                 style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13)),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 20,
+                    color: color)),
+            Text(label, style: const TextStyle(fontSize: 11)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTicketItem(
-      BuildContext context, Map<String, dynamic> ticket) {
-    final statusColor = _getStatusColor(ticket['status'] as String);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(Icons.confirmation_num_outlined,
-              color: statusColor, size: 20),
-        ),
-        title: Text(ticket['title'] as String,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 14),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(ticket['status'] as String,
-                    style: TextStyle(
-                        color: statusColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 8),
-              Text(ticket['date'] as String,
-                  style: const TextStyle(fontSize: 11)),
-            ],
-          ),
-        ),
-        trailing: const Icon(Icons.chevron_right_rounded, size: 20),
-        onTap: () => Navigator.pushNamed(context, '/ticket-detail',
-            arguments: ticket),
+  Widget _badge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
+      child: Text(label,
+          style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w600)),
     );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Open':
-        return AppColors.statusOpen;
-      case 'In Progress':
-        return AppColors.statusInProgress;
-      case 'Resolved':
-        return AppColors.statusResolved;
-      default:
-        return AppColors.statusClosed;
-    }
   }
 }

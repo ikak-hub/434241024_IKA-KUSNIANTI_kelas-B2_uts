@@ -1,4 +1,4 @@
-enum UserRole { admin, user }
+enum UserRole { admin, helpdesk, technicalSupport, user }
 
 class UserModel {
   final String id;
@@ -16,8 +16,24 @@ class UserModel {
   });
 
   bool get isAdmin => role == UserRole.admin;
+  bool get isHelpdesk => role == UserRole.helpdesk;
+  bool get isTechnicalSupport => role == UserRole.technicalSupport;
+  bool get isUser => role == UserRole.user;
 
-  String get roleLabel => role == UserRole.admin ? 'Admin' : 'User';
+
+
+  String get roleLabel {
+    switch (role) {
+      case UserRole.admin:
+        return 'Admin';
+      case UserRole.helpdesk:
+        return 'Helpdesk';
+      case UserRole.technicalSupport:
+        return 'Technical Support';
+      case UserRole.user:
+        return 'User';
+    }
+  }
 
   static const List<UserModel> dummyUsers = [
     UserModel(
@@ -29,16 +45,30 @@ class UserModel {
     ),
     UserModel(
       id: '2',
-      name: 'John Doe',
-      email: 'john.doe@student.unair.ac.id',
+      name: 'Wowo',
+      email: 'wowo.doe@student.unair.ac.id',
       username: 'user',
       role: UserRole.user,
     ),
     UserModel(
       id: '3',
-      name: 'Jane Smith',
-      email: 'jane.smith@student.unair.ac.id',
-      username: 'jane',
+      name: 'Ika Helpdesk',
+      email: 'Ika.helpdesk@unair.ac.id',
+      username: 'helpdesk',
+      role: UserRole.helpdesk,
+    ),
+    UserModel(
+      id: '4',
+      name: 'Tariq Teknisi',
+      email: 'Tariq.teknisi@unair.ac.id',
+      username: 'teknisi',
+      role: UserRole.technicalSupport,
+    ),
+    UserModel(
+      id: '5',
+      name: 'Bahlil',
+      email: 'Bahlil.smith@student.unair.ac.id',
+      username: 'Buahlil',
       role: UserRole.user,
     ),
   ];

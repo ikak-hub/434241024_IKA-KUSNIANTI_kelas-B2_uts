@@ -10,17 +10,20 @@ class AuthService {
   UserModel? get currentUser => _currentUser;
   bool get isLoggedIn => _currentUser != null;
   bool get isAdmin => _currentUser?.isAdmin ?? false;
+  bool get isHelpdesk => _currentUser?.isHelpdesk ?? false;
+  bool get isTechnicalSupport => _currentUser?.isTechnicalSupport ?? false;
+  bool get isUser => _currentUser?.isUser ?? false;
 
   /// Returns null on success, error message on failure
   Future<String?> login(String username, String password) async {
-    await Future.delayed(const Duration(seconds: 2)); // simulate network
+    await Future.delayed(const Duration(seconds: 1));
 
-    // Dummy credential check
-    // Admin: admin / admin123
-    // User: user / user123  (or any username with password "password")
+    // Credentials map
     final Map<String, String> credentials = {
       'admin': 'admin123',
       'user': 'user123',
+      'helpdesk': 'helpdesk123',
+      'teknisi': 'teknisi123',
       'jane': 'password',
     };
 
@@ -34,21 +37,10 @@ class AuthService {
     _currentUser = UserModel.dummyUsers.firstWhere(
       (u) => u.username == username,
     );
-    return null; // success
+    return null;
   }
 
   void logout() {
     _currentUser = null;
-  }
-
-  Future<String?> register({
-    required String name,
-    required String email,
-    required String username,
-    required String password,
-  }) async {
-    await Future.delayed(const Duration(seconds: 2));
-    // In real app, call API here
-    return null; // success
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
+import '../models/user_model.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,7 +14,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  bool _obscurePassword = true;
+  bool _obscure = true;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -24,10 +25,8 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
-    final error = await AuthService().login(
-      _usernameCtrl.text.trim(),
-      _passwordCtrl.text,
-    );
+    final error = await AuthService()
+        .login(_usernameCtrl.text.trim(), _passwordCtrl.text);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -37,12 +36,20 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // Route based on role
     final user = AuthService().currentUser!;
-    if (user.isAdmin) {
-      Navigator.pushReplacementNamed(context, '/admin-dashboard');
-    } else {
-      Navigator.pushReplacementNamed(context, '/dashboard');
+    switch (user.role) {
+      case UserRole.admin:
+        Navigator.pushReplacementNamed(context, '/admin-dashboard');
+        break;
+      case UserRole.helpdesk:
+        Navigator.pushReplacementNamed(context, '/helpdesk-dashboard');
+        break;
+      case UserRole.technicalSupport:
+        Navigator.pushReplacementNamed(context, '/tech-dashboard');
+        break;
+      case UserRole.user:
+        Navigator.pushReplacementNamed(context, '/dashboard');
+        break;
     }
   }
 
@@ -55,8 +62,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -66,15 +71,13 @@ class _LoginScreenState extends State<LoginScreen> {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(24, 48, 24, 40),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: isDark
-                        ? [AppColors.surfaceDark, AppColors.cardDark]
-                        : [AppColors.primary, AppColors.primaryLight],
+                    colors: [AppColors.primary, AppColors.primaryLight],
                   ),
-                  borderRadius: const BorderRadius.only(
+                  borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(40),
                     bottomRight: Radius.circular(40),
                   ),
@@ -96,24 +99,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text(
                       'Selamat Datang',
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                      ),
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Masuk ke akun E-Ticketing Helpdesk',
+                      'E-Ticketing Helpdesk – Universitas Airlangga',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
-                        fontSize: 14,
-                      ),
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 13),
                     ),
                   ],
                 ),
               ),
 
-              // Form
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Form(
@@ -123,7 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       const SizedBox(height: 8),
 
-                      // Info hint box
+                      // Demo accounts hint
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -146,11 +146,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                       color: AppColors.statusOpen)),
                             ]),
                             SizedBox(height: 6),
-                            Text('Admin  → username: admin  | pass: admin123',
+                            Text('Admin      → admin / admin123',
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: AppColors.statusOpen)),
-                            Text('User    → username: user   | pass: user123',
+                            Text('Helpdesk   → helpdesk / helpdesk123',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.statusOpen)),
+                            Text('Teknisi    → teknisi / teknisi123',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.statusOpen)),
+                            Text('User       → user / user123',
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: AppColors.statusOpen)),
@@ -159,7 +167,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Error message
                       if (_errorMessage != null) ...[
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -183,59 +190,46 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                       ],
 
-                      // Username
-                      _buildLabel('Username'),
+                      const Text('Username',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _usernameCtrl,
                         decoration: const InputDecoration(
                           hintText: 'Masukkan username',
-                          prefixIcon: Icon(Icons.person_outline_rounded),
+                          prefixIcon:
+                              Icon(Icons.person_outline_rounded),
                         ),
                         validator: (v) =>
-                            v!.isEmpty ? 'Username tidak boleh kosong' : null,
+                            v!.isEmpty ? 'Username wajib diisi' : null,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
 
-                      // Password
-                      _buildLabel('Password'),
+                      const Text('Password',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _passwordCtrl,
-                        obscureText: _obscurePassword,
+                        obscureText: _obscure,
                         decoration: InputDecoration(
                           hintText: 'Masukkan password',
                           prefixIcon:
                               const Icon(Icons.lock_outline_rounded),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword
+                            icon: Icon(_obscure
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_outlined),
-                            onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword),
+                            onPressed: () =>
+                                setState(() => _obscure = !_obscure),
                           ),
                         ),
                         validator: (v) =>
-                            v!.isEmpty ? 'Password tidak boleh kosong' : null,
+                            v!.isEmpty ? 'Password wajib diisi' : null,
                       ),
 
-                      const SizedBox(height: 12),
-
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () {},
-                          child: const Text(
-                            'Lupa Password?',
-                            style: TextStyle(
-                              color: AppColors.accent,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 28),
 
                       SizedBox(
                         width: double.infinity,
@@ -246,39 +240,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   height: 20,
                                   width: 20,
                                   child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
+                                      color: Colors.white, strokeWidth: 2),
                                 )
                               : const Text('Masuk'),
                         ),
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Belum punya akun?',
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () =>
-                                Navigator.pushNamed(context, '/register'),
-                            child: const Text(
-                              'Daftar Sekarang',
-                              style: TextStyle(
-                                color: AppColors.accent,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
@@ -288,13 +253,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
     );
   }
 }

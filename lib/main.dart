@@ -1,20 +1,10 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
-import 'pages/splash_page.dart';
 import 'pages/login_page.dart';
-import 'pages/register_page.dart';
 import 'pages/dashboard_page.dart';
-import 'pages/ticket_list_page.dart';
-import 'pages/ticket_detail_page.dart';
-import 'pages/create_ticket_page.dart';
-import 'pages/profile_page.dart';
-
-// Admin pages
 import 'pages/admin/dashboard_page.dart';
-import 'pages/admin/ticket_management_page.dart';
-import 'pages/admin/ticket_detail_page.dart';
-import 'pages/admin/user_management_page.dart';
-import 'pages/admin/admin_profile_page.dart';
+import 'pages/helpdesk/dashboard_page_hd.dart';
+import 'pages/techsupport/dashboard_page_tc.dart';
 
 void main() {
   runApp(const HelpdeskApp());
@@ -45,37 +35,30 @@ class _HelpdeskAppState extends State<HelpdeskApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: _themeMode,
-      initialRoute: '/splash',
+      initialRoute: '/login',
       routes: {
-        // ── Common ──────────────────────────────────────────────
-        '/splash': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
-        '/register': (context) => const RegisterScreen(),
 
-        // ── User routes ──────────────────────────────────────────
-        '/dashboard': (context) => DashboardScreen(
-              onToggleTheme: _toggleTheme,
-              themeMode: _themeMode,
-            ),
-        '/tickets': (context) => const TicketListScreen(),
-        '/ticket-detail': (context) => const TicketDetailScreen(),
-        '/create-ticket': (context) => const CreateTicketScreen(),
-        '/profile': (context) => ProfileScreen(
+        // User
+        '/dashboard': (context) => UserDashboardScreen(
               onToggleTheme: _toggleTheme,
               themeMode: _themeMode,
             ),
 
-        // ── Admin routes ─────────────────────────────────────────
+        // Admin
         '/admin-dashboard': (context) => AdminDashboardScreen(
               onToggleTheme: _toggleTheme,
               themeMode: _themeMode,
             ),
-        '/admin-tickets': (context) =>
-            const AdminTicketManagementScreen(),
-        '/admin-ticket-detail': (context) =>
-            const AdminTicketDetailScreen(),
-        '/admin-users': (context) => const AdminUserManagementScreen(),
-        '/admin-profile': (context) => AdminProfileScreen(
+
+        // Helpdesk
+        '/helpdesk-dashboard': (context) => HelpdeskDashboardScreen(
+              onToggleTheme: _toggleTheme,
+              themeMode: _themeMode,
+            ),
+
+        // Technical Support
+        '/tech-dashboard': (context) => TechSupportDashboardScreen(
               onToggleTheme: _toggleTheme,
               themeMode: _themeMode,
             ),

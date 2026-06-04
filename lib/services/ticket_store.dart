@@ -1,5 +1,8 @@
-// lib/services/ticket_store.dart
 import 'package:flutter/foundation.dart';
+
+// Alur tiket:
+// pending_approval → (admin approve) → approved → (helpdesk assign) → assigned_helpdesk
+// → (helpdesk forward) → assigned_technical → (teknisi handle) → in_progress → resolved → closed
 
 class TicketStore extends ChangeNotifier {
   static final TicketStore _instance = TicketStore._internal();
@@ -11,6 +14,7 @@ class TicketStore extends ChangeNotifier {
       'id': '#TKT-001',
       'title': 'Koneksi internet tidak stabil di lab A',
       'status': 'Open',
+      'flowStatus': 'approved',
       'user': 'John Doe',
       'userId': '2',
       'date': '13 Apr 2026',
@@ -18,14 +22,18 @@ class TicketStore extends ChangeNotifier {
       'category': 'Jaringan / Internet',
       'description':
           'Koneksi internet di laboratorium A sering putus dan sangat mengganggu aktivitas perkuliahan.',
-      'assignedTo': '-',
+      'assignedHelpdeskId': null,
+      'assignedHelpdeskName': null,
+      'assignedTechId': null,
+      'assignedTechName': null,
+      'approvedBy': 'Administrator',
       'attachments': <String>[],
       'comments': <Map<String, dynamic>>[
         {
-          'user': 'Helpdesk Tim',
-          'role': 'Helpdesk',
-          'message': 'Tiket Anda telah diterima. Kami akan segera menindaklanjuti.',
-          'time': '13 Apr 2026 09:00',
+          'user': 'Administrator',
+          'role': 'Admin',
+          'message': 'Tiket telah disetujui dan diteruskan ke helpdesk.',
+          'time': '13 Apr 2026 09:05',
           'isHelpdesk': true,
         },
       ],
@@ -34,13 +42,18 @@ class TicketStore extends ChangeNotifier {
       'id': '#TKT-002',
       'title': 'Printer tidak bisa digunakan di lantai 2',
       'status': 'In Progress',
+      'flowStatus': 'assigned_technical',
       'user': 'John Doe',
       'userId': '2',
       'date': '12 Apr 2026',
       'priority': 'Medium',
       'category': 'Printer / Scanner',
       'description': 'Printer lantai 2 tidak terdeteksi oleh komputer.',
-      'assignedTo': 'Teknisi A',
+      'assignedHelpdeskId': '3',
+      'assignedHelpdeskName': 'Budi Helpdesk',
+      'assignedTechId': '4',
+      'assignedTechName': 'Siti Teknisi',
+      'approvedBy': 'Administrator',
       'attachments': <String>[],
       'comments': <Map<String, dynamic>>[],
     },
@@ -48,13 +61,18 @@ class TicketStore extends ChangeNotifier {
       'id': '#TKT-003',
       'title': 'Akses sistem akademik error',
       'status': 'Resolved',
+      'flowStatus': 'resolved',
       'user': 'Jane Smith',
-      'userId': '3',
+      'userId': '5',
       'date': '10 Apr 2026',
       'priority': 'High',
       'category': 'Sistem / Software',
       'description': 'Tidak bisa login ke portal akademik.',
-      'assignedTo': 'Teknisi B',
+      'assignedHelpdeskId': '3',
+      'assignedHelpdeskName': 'Budi Helpdesk',
+      'assignedTechId': '4',
+      'assignedTechName': 'Siti Teknisi',
+      'approvedBy': 'Administrator',
       'attachments': <String>[],
       'comments': <Map<String, dynamic>>[],
     },
@@ -62,13 +80,18 @@ class TicketStore extends ChangeNotifier {
       'id': '#TKT-004',
       'title': 'Proyektor ruang rapat mati',
       'status': 'Open',
+      'flowStatus': 'pending_approval',
       'user': 'Jane Smith',
-      'userId': '3',
+      'userId': '5',
       'date': '9 Apr 2026',
       'priority': 'Low',
       'category': 'Komputer / Hardware',
       'description': 'Proyektor di ruang rapat tidak menyala.',
-      'assignedTo': '-',
+      'assignedHelpdeskId': null,
+      'assignedHelpdeskName': null,
+      'assignedTechId': null,
+      'assignedTechName': null,
+      'approvedBy': null,
       'attachments': <String>[],
       'comments': <Map<String, dynamic>>[],
     },
@@ -76,13 +99,18 @@ class TicketStore extends ChangeNotifier {
       'id': '#TKT-005',
       'title': 'Koneksi VPN kampus tidak bisa connect',
       'status': 'Open',
-      'user': 'Budi Santoso',
-      'userId': '4',
+      'flowStatus': 'pending_approval',
+      'user': 'John Doe',
+      'userId': '2',
       'date': '22 Mei 2026',
       'priority': 'High',
       'category': 'Jaringan / Internet',
       'description': 'VPN kampus tidak bisa diakses dari luar jaringan.',
-      'assignedTo': '-',
+      'assignedHelpdeskId': null,
+      'assignedHelpdeskName': null,
+      'assignedTechId': null,
+      'assignedTechName': null,
+      'approvedBy': null,
       'attachments': <String>[],
       'comments': <Map<String, dynamic>>[],
     },
@@ -90,79 +118,68 @@ class TicketStore extends ChangeNotifier {
       'id': '#TKT-006',
       'title': 'Software SPSS tidak bisa diinstall',
       'status': 'Open',
-      'user': 'Siti Rahayu',
+      'flowStatus': 'assigned_helpdesk',
+      'user': 'Jane Smith',
       'userId': '5',
       'date': '21 Mei 2026',
       'priority': 'Medium',
       'category': 'Sistem / Software',
       'description': 'Gagal install SPSS di laptop Windows 11.',
-      'assignedTo': '-',
-      'attachments': <String>[],
-      'comments': <Map<String, dynamic>>[],
-    },
-    {
-      'id': '#TKT-007',
-      'title': 'Akun email mahasiswa baru belum aktif',
-      'status': 'In Progress',
-      'user': 'Ahmad Fauzi',
-      'userId': '6',
-      'date': '20 Mei 2026',
-      'priority': 'High',
-      'category': 'Email / Akun',
-      'description': 'Email @student.unair.ac.id belum bisa digunakan.',
-      'assignedTo': 'Teknisi C',
-      'attachments': <String>[],
-      'comments': <Map<String, dynamic>>[],
-    },
-    {
-      'id': '#TKT-008',
-      'title': 'Email kampus tidak bisa diakses',
-      'status': 'Closed',
-      'user': 'Dewi Lestari',
-      'userId': '7',
-      'date': '8 Apr 2026',
-      'priority': 'High',
-      'category': 'Email / Akun',
-      'description': 'Tidak bisa masuk ke email @student.unair.ac.id',
-      'assignedTo': 'Teknisi A',
+      'assignedHelpdeskId': '3',
+      'assignedHelpdeskName': 'Budi Helpdesk',
+      'assignedTechId': null,
+      'assignedTechName': null,
+      'approvedBy': 'Administrator',
       'attachments': <String>[],
       'comments': <Map<String, dynamic>>[],
     },
   ];
 
-  int _ticketCounter = 9;
+  int _ticketCounter = 7;
 
-  // ── Getters ────────────────────────────────────────────────
+  // ── Getters ─────────────────────────────────────────────────────────────
 
   List<Map<String, dynamic>> get allTickets =>
       List.unmodifiable(_tickets.reversed.toList());
 
   List<Map<String, dynamic>> ticketsForUser(String userId) =>
-      _tickets.reversed
-          .where((t) => t['userId'] == userId)
+      _tickets.reversed.where((t) => t['userId'] == userId).toList();
+
+  /// Tiket menunggu persetujuan admin
+  List<Map<String, dynamic>> get pendingApprovalTickets =>
+      _tickets.where((t) => t['flowStatus'] == 'pending_approval').toList();
+
+  /// Tiket yang sudah diapprove admin (menunggu helpdesk)
+  List<Map<String, dynamic>> get approvedTickets =>
+      _tickets.where((t) => t['flowStatus'] == 'approved').toList();
+
+  /// Tiket yang sudah di-assign ke helpdesk
+  List<Map<String, dynamic>> ticketsForHelpdesk(String helpdeskId) =>
+      _tickets
+          .where((t) =>
+              t['assignedHelpdeskId'] == helpdeskId ||
+              t['flowStatus'] == 'approved')
+          .reversed
           .toList();
 
-  List<Map<String, dynamic>> get pendingTickets =>
+  /// Tiket yang sudah di-assign ke technical support
+  List<Map<String, dynamic>> ticketsForTechnicalSupport(String techId) =>
       _tickets
-          .where((t) => t['status'] == 'Open' || t['status'] == 'In Progress')
+          .where((t) => t['assignedTechId'] == techId)
+          .reversed
           .toList();
 
   int get totalCount => _tickets.length;
-  int get openCount =>
-      _tickets.where((t) => t['status'] == 'Open').length;
+  int get openCount => _tickets.where((t) => t['status'] == 'Open').length;
   int get inProgressCount =>
       _tickets.where((t) => t['status'] == 'In Progress').length;
   int get resolvedCount =>
       _tickets.where((t) => t['status'] == 'Resolved').length;
+  int get pendingCount => pendingApprovalTickets.length;
 
-  int openCountForUser(String userId) =>
-      _tickets.where((t) => t['userId'] == userId && t['status'] == 'Open').length;
-  int resolvedCountForUser(String userId) =>
-      _tickets.where((t) => t['userId'] == userId && t['status'] == 'Resolved').length;
+  // ── Actions ──────────────────────────────────────────────────────────────
 
-  // ── Actions ────────────────────────────────────────────────
-
-  /// Create a new ticket; returns the created ticket map
+  /// User membuat tiket baru (status: pending_approval)
   Map<String, dynamic> createTicket({
     required String userId,
     required String userName,
@@ -174,31 +191,35 @@ class TicketStore extends ChangeNotifier {
   }) {
     final id = '#TKT-${_ticketCounter.toString().padLeft(3, '0')}';
     _ticketCounter++;
-
     final now = DateTime.now();
-    final dateStr =
-        '${now.day} ${_monthName(now.month)} ${now.year}';
+    final dateStr = '${now.day} ${_monthName(now.month)} ${now.year}';
 
     final ticket = <String, dynamic>{
       'id': id,
       'title': title,
       'status': 'Open',
+      'flowStatus': 'pending_approval',
       'user': userName,
       'userId': userId,
       'date': dateStr,
       'priority': priority,
       'category': category,
       'description': description,
-      'assignedTo': '-',
+      'assignedHelpdeskId': null,
+      'assignedHelpdeskName': null,
+      'assignedTechId': null,
+      'assignedTechName': null,
+      'approvedBy': null,
       'attachments': List<String>.from(attachments),
       'comments': <Map<String, dynamic>>[
         {
-          'user': 'Helpdesk Tim',
-          'role': 'Helpdesk',
+          'user': 'Sistem',
+          'role': 'System',
           'message':
-              'Tiket Anda telah diterima. Kami akan segera menindaklanjuti.',
-          'time': '$dateStr ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-          'isHelpdesk': true,
+              'Tiket berhasil dibuat dan menunggu persetujuan admin.',
+          'time':
+              '$dateStr ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+          'isHelpdesk': false,
         },
       ],
     };
@@ -208,7 +229,83 @@ class TicketStore extends ChangeNotifier {
     return ticket;
   }
 
-  /// Update status of a ticket by id
+  /// Admin menyetujui tiket → flowStatus: approved
+  void approveTicket(String ticketId, String adminName) {
+    final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
+    if (idx != -1) {
+      _tickets[idx]['flowStatus'] = 'approved';
+      _tickets[idx]['approvedBy'] = adminName;
+      _addSystemComment(idx, adminName, 'Admin',
+          'Tiket telah disetujui. Diteruskan ke tim Helpdesk.');
+      notifyListeners();
+    }
+  }
+
+  /// Admin menolak tiket → flowStatus: rejected
+  void rejectTicket(String ticketId, String adminName, String reason) {
+    final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
+    if (idx != -1) {
+      _tickets[idx]['flowStatus'] = 'rejected';
+      _tickets[idx]['status'] = 'Closed';
+      _addSystemComment(idx, adminName, 'Admin', 'Tiket ditolak. Alasan: $reason');
+      notifyListeners();
+    }
+  }
+
+  /// Helpdesk menerima & assign tiket ke diri sendiri → flowStatus: assigned_helpdesk
+  void helpdeskAcceptTicket(
+      String ticketId, String helpdeskId, String helpdeskName) {
+    final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
+    if (idx != -1) {
+      _tickets[idx]['flowStatus'] = 'assigned_helpdesk';
+      _tickets[idx]['assignedHelpdeskId'] = helpdeskId;
+      _tickets[idx]['assignedHelpdeskName'] = helpdeskName;
+      _tickets[idx]['status'] = 'In Progress';
+      _addSystemComment(idx, helpdeskName, 'Helpdesk',
+          'Tiket diterima oleh helpdesk. Sedang dikaji sebelum diteruskan ke Technical Support.');
+      notifyListeners();
+    }
+  }
+
+  /// Helpdesk meneruskan ke Technical Support → flowStatus: assigned_technical
+  void helpdeskForwardToTech(
+      String ticketId, String techId, String techName, String helpdeskName) {
+    final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
+    if (idx != -1) {
+      _tickets[idx]['flowStatus'] = 'assigned_technical';
+      _tickets[idx]['assignedTechId'] = techId;
+      _tickets[idx]['assignedTechName'] = techName;
+      _addSystemComment(idx, helpdeskName, 'Helpdesk',
+          'Tiket diteruskan ke Technical Support: $techName.');
+      notifyListeners();
+    }
+  }
+
+  /// Technical Support mulai menangani → flowStatus: in_progress
+  void techStartHandling(String ticketId, String techName) {
+    final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
+    if (idx != -1) {
+      _tickets[idx]['flowStatus'] = 'in_progress';
+      _tickets[idx]['status'] = 'In Progress';
+      _addSystemComment(idx, techName, 'Technical Support',
+          'Technical Support mulai menangani masalah ini.');
+      notifyListeners();
+    }
+  }
+
+  /// Technical Support menyelesaikan tiket → flowStatus: resolved
+  void techResolveTicket(String ticketId, String techName, String resolution) {
+    final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
+    if (idx != -1) {
+      _tickets[idx]['flowStatus'] = 'resolved';
+      _tickets[idx]['status'] = 'Resolved';
+      _addSystemComment(idx, techName, 'Technical Support',
+          'Masalah telah diselesaikan. $resolution');
+      notifyListeners();
+    }
+  }
+
+  /// Update status manual
   void updateStatus(String ticketId, String newStatus) {
     final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
     if (idx != -1) {
@@ -217,7 +314,7 @@ class TicketStore extends ChangeNotifier {
     }
   }
 
-  /// Add a comment to a ticket
+  /// Tambah komentar
   void addComment(String ticketId, Map<String, dynamic> comment) {
     final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
     if (idx != -1) {
@@ -226,19 +323,34 @@ class TicketStore extends ChangeNotifier {
     }
   }
 
-  /// Assign technician
-  void assignTechnician(String ticketId, String technician) {
-    final idx = _tickets.indexWhere((t) => t['id'] == ticketId);
-    if (idx != -1) {
-      _tickets[idx]['assignedTo'] = technician;
-      notifyListeners();
-    }
+  void _addSystemComment(
+      int idx, String user, String role, String message) {
+    final now = DateTime.now();
+    (_tickets[idx]['comments'] as List).add({
+      'user': user,
+      'role': role,
+      'message': message,
+      'time':
+          '${now.day}/${now.month}/${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+      'isHelpdesk': true,
+    });
   }
 
   String _monthName(int m) {
     const months = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Ags',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
     ];
     return months[m];
   }
