@@ -149,6 +149,14 @@ class TicketStore extends ChangeNotifier {
   List<Map<String, dynamic>> get pendingApprovalTickets =>
       _tickets.where((t) => t['flowStatus'] == 'pending_approval').toList();
 
+  /// Alias for admin dashboard — tickets needing action (pending + approved)
+  List<Map<String, dynamic>> get pendingTickets =>
+      _tickets
+          .where((t) =>
+      t['flowStatus'] == 'pending_approval' ||
+          t['flowStatus'] == 'approved')
+          .toList();
+
   /// Tiket yang sudah diapprove admin (menunggu helpdesk)
   List<Map<String, dynamic>> get approvedTickets =>
       _tickets.where((t) => t['flowStatus'] == 'approved').toList();
@@ -159,6 +167,7 @@ class TicketStore extends ChangeNotifier {
           .where((t) =>
               t['assignedHelpdeskId'] == helpdeskId ||
               t['flowStatus'] == 'approved')
+          .toList()
           .reversed
           .toList();
 
@@ -166,6 +175,7 @@ class TicketStore extends ChangeNotifier {
   List<Map<String, dynamic>> ticketsForTechnicalSupport(String techId) =>
       _tickets
           .where((t) => t['assignedTechId'] == techId)
+          .toList()
           .reversed
           .toList();
 
