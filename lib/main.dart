@@ -5,10 +5,23 @@ import 'pages/dashboard_page.dart';
 import 'pages/admin/dashboard_page.dart';
 import 'pages/helpdesk/dashboard_page_hd.dart';
 import 'pages/techsupport/dashboard_page_tc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+// 1. Inisialisasi Supabase di sini sebelum aplikasi berjalan
+void main() async {
+  // Wajib ditambahkan agar proses async saat init Supabase berjalan lancar
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://jvuylecnnwpfdqnghpef.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2dXlsZWNubndwZmRxbmdocGVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NzEyNzMsImV4cCI6MjA5NzU0NzI3M30._R1hC7_RBpo9sAr4tcK3MVqY4MDj4fq5_XSkrGAr3ZQ', // <-- Taruh Anon Key panjangmu di sini
+  );
+
   runApp(const HelpdeskApp());
 }
+
+// 2. Buat instance client global di bawah main untuk dipakai di page Login/Dashboard nanti
+final supabase = Supabase.instance.client;
 
 class HelpdeskApp extends StatefulWidget {
   const HelpdeskApp({super.key});
