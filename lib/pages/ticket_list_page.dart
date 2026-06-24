@@ -1,10 +1,15 @@
-// lib/pages/ticket_list_page.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav.dart';
 import '../services/auth_service.dart';
-import '../services/ticket_store.dart';
+import '../services/ticket_service.dart';
+import '../models/ticket_model.dart';
+import 'create_ticket_page.dart';
 
+/// SRS 5.6 List Tiket Screen — menampilkan daftar tiket sesuai role:
+/// User melihat tiketnya sendiri, Helpdesk melihat open+assigned ke dia,
+/// Admin melihat semua (filter dilakukan di TicketService berdasarkan RLS).
 class TicketListScreen extends StatefulWidget {
   const TicketListScreen({super.key});
 
@@ -21,9 +26,8 @@ class _TicketListScreenState extends State<TicketListScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    // Listen to store changes
-    TicketStore().addListener(_onStoreChange);
+    _tabController = TabController(length: 5, vsync: this);
+    TicketService().addListener(_onStoreChange);
   }
 
   void _onStoreChange() {
@@ -34,72 +38,80 @@ class _TicketListScreenState extends State<TicketListScreen>
   void dispose() {
     _tabController.dispose();
     _searchCtrl.dispose();
-    TicketStore().removeListener(_onStoreChange);
+    TicketService().removeListener(_onStoreChange);
     super.dispose();
   }
 
-  List<Map<String, dynamic>> _filtered(String status) {
+  List<TicketModel> _baseList() {
     final user = AuthService().currentUser;
-    final base = user != null
-        ? TicketStore().ticketsForUser(user.id)
-        : TicketStore().allTickets;
+    if (user == null) return [];
+    if (user.isUser) return TicketService().ticketsForUser(user.id);
+    if (user.isHelpdesk) return TicketService().ticketsForHelpdesk(user.id);
+    return TicketService().tickets; // admin: semua (sudah dibatasi RLS)
+  }
 
-    final list = status == 'All'
-        ? base
-        : base.where((t) => t['status'] == status).toList();
+  List<TicketModel> _filtered(TicketStatus? status) {
+    final base = _baseList();
+    final list =
+        status == null ? base : base.where((t) => t.status == status).toList();
 
     if (_searchQuery.isEmpty) return list;
+    final q = _searchQuery.toLowerCase();
     return list
         .where((t) =>
-            (t['title'] as String)
-                .toLowerCase()
-                .contains(_searchQuery.toLowerCase()) ||
-            (t['id'] as String)
-                .toLowerCase()
-                .contains(_searchQuery.toLowerCase()))
+            t.title.toLowerCase().contains(q) ||
+            t.ticketNumber.toLowerCase().contains(q) ||
+            t.userName.toLowerCase().contains(q))
         .toList();
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'Open':
+  Color _statusColor(TicketStatus s) {
+    switch (s) {
+      case TicketStatus.open:
         return AppColors.statusOpen;
-      case 'In Progress':
+      case TicketStatus.assigned:
+        return AppColors.roleHelpdesk;
+      case TicketStatus.inProgress:
         return AppColors.statusInProgress;
-      case 'Resolved':
+      case TicketStatus.resolved:
         return AppColors.statusResolved;
-      default:
+      case TicketStatus.closed:
         return AppColors.statusClosed;
     }
   }
 
   Color _priorityColor(String priority) {
-    switch (priority) {
-      case 'High':
+    switch (priority.toLowerCase()) {
+      case 'high':
         return Colors.red;
-      case 'Medium':
-        return Colors.orange;
-      default:
+      case 'low':
         return Colors.green;
+      default:
+        return Colors.orange;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = AuthService().currentUser;
+    final isUserRole = user?.isUser ?? true;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Daftar Tiket'),
         automaticallyImplyLeading: false,
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           indicatorColor: AppColors.accent,
           indicatorWeight: 3,
           tabs: const [
             Tab(text: 'Semua'),
-            Tab(text: 'Open'),
-            Tab(text: 'Progress'),
+            Tab(text: 'Menunggu'),
+            Tab(text: 'Ditugaskan'),
+            Tab(text: 'Proses'),
             Tab(text: 'Selesai'),
           ],
         ),
@@ -130,148 +142,170 @@ class _TicketListScreenState extends State<TicketListScreen>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildList('All'),
-                _buildList('Open'),
-                _buildList('In Progress'),
-                _buildList('Resolved'),
+                _buildList(null),
+                _buildList(TicketStatus.open),
+                _buildList(TicketStatus.assigned),
+                _buildList(TicketStatus.inProgress),
+                _buildList(TicketStatus.resolved),
               ],
             ),
           ),
         ],
       ),
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: 1,
-        onTap: (i) {
-          if (i == 0) Navigator.pushReplacementNamed(context, '/dashboard');
-          if (i == 2) Navigator.pushReplacementNamed(context, '/profile');
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accent,
-        onPressed: () => Navigator.pushNamed(context, '/create-ticket'),
-        child: const Icon(Icons.add_rounded, color: Colors.white),
-      ),
+      bottomNavigationBar: isUserRole
+          ? AppBottomNav(
+              currentIndex: 1,
+              onTap: (i) {
+                if (i == 0) {
+                  Navigator.pushReplacementNamed(context, '/dashboard');
+                }
+                if (i == 2) {
+                  Navigator.pushNamed(context, '/notifications');
+                }
+                if (i == 3) {
+                  Navigator.pushReplacementNamed(context, '/profile');
+                }
+              },
+            )
+          : null,
+      floatingActionButton: isUserRole
+          ? FloatingActionButton(
+              backgroundColor: AppColors.accent,
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CreateTicketScreen()),
+              ),
+              child: const Icon(Icons.add_rounded, color: Colors.white),
+            )
+          : null,
     );
   }
 
-  Widget _buildList(String status) {
+  Widget _buildList(TicketStatus? status) {
     final list = _filtered(status);
+    if (TicketService().isLoading && list.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (list.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_outlined,
-                size: 64, color: Colors.grey.shade400),
+            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text('Tidak ada tiket',
-                style: TextStyle(
-                    color: Colors.grey.shade500, fontSize: 16)),
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 16)),
           ],
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-      itemCount: list.length,
-      itemBuilder: (_, i) {
-        final ticket = list[i];
-        final statusColor = _statusColor(ticket['status'] as String);
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: InkWell(
-            onTap: () => Navigator.pushNamed(
-                context, '/ticket-detail',
-                arguments: ticket),
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(ticket['id'] as String,
-                          style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondaryLight)),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _priorityColor(ticket['priority'] as String)
-                              .withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
+    return RefreshIndicator(
+      onRefresh: () => TicketService().loadTickets(),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+        itemCount: list.length,
+        itemBuilder: (_, i) {
+          final ticket = list[i];
+          final statusColor = _statusColor(ticket.status);
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: InkWell(
+              onTap: () => Navigator.pushNamed(context, '/ticket-detail',
+                  arguments: {'ticketId': ticket.id}),
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(ticket.ticketNumber,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondaryLight)),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _priorityColor(ticket.priority)
+                                .withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(ticket.priorityLabel,
+                              style: TextStyle(
+                                  color: _priorityColor(ticket.priority),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600)),
                         ),
-                        child: Text(ticket['priority'] as String,
-                            style: TextStyle(
-                                color: _priorityColor(
-                                    ticket['priority'] as String),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(ticket['title'] as String,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 15),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 4),
-                  if ((ticket['category'] as String?)?.isNotEmpty == true)
-                    Text(ticket['category'] as String,
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(ticket.title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 15),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text(ticket.category,
                         style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.textSecondaryLight)),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                  color: statusColor,
-                                  shape: BoxShape.circle),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(ticket['status'] as String,
-                                style: TextStyle(
-                                    color: statusColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
-                          ],
-                        ),
+                    if (AuthService().currentUser?.isUser == false)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text('Oleh: ${ticket.userName}',
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondaryLight)),
                       ),
-                      const Spacer(),
-                      Icon(Icons.calendar_today_outlined,
-                          size: 12, color: Colors.grey.shade500),
-                      const SizedBox(width: 4),
-                      Text(ticket['date'] as String,
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500)),
-                    ],
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                    color: statusColor, shape: BoxShape.circle),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(ticketStatusLabel(ticket.status),
+                                  style: TextStyle(
+                                      color: statusColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        Icon(Icons.calendar_today_outlined,
+                            size: 12, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text(DateFormat('d MMM yyyy').format(ticket.createdAt),
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade500)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

@@ -1,10 +1,10 @@
-// lib/pages/create_ticket_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
-import '../services/ticket_store.dart';
+import '../services/ticket_service.dart';
 
 class CreateTicketScreen extends StatefulWidget {
   const CreateTicketScreen({super.key});
@@ -20,9 +20,9 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   String _selectedCategory = 'Jaringan / Internet';
   String _selectedPriority = 'Medium';
 
-  /// Stores picked image/file paths
   final List<_Attachment> _attachments = [];
   bool _isLoading = false;
+  String? _errorMessage;
 
   final ImagePicker _picker = ImagePicker();
 
@@ -41,15 +41,14 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     {'label': 'High', 'color': Colors.red, 'icon': Icons.arrow_upward},
   ];
 
-  // ── Attachment helpers ─────────────────────────────────────
-
   Future<void> _pickFromCamera() async {
     Navigator.pop(context);
     try {
-      final XFile? photo =
-          await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+      final XFile? photo = await _picker.pickImage(
+          source: ImageSource.camera, imageQuality: 80);
       if (photo != null) {
-        setState(() => _attachments.add(_Attachment(path: photo.path, isImage: true)));
+        setState(
+            () => _attachments.add(_Attachment(path: photo.path, isImage: true)));
       }
     } catch (e) {
       _showError('Tidak dapat mengakses kamera: $e');
@@ -72,15 +71,32 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     }
   }
 
-  /// For non-image files we simulate (image_picker doesn't support general files;
-  /// in production swap with file_picker package)
+  /// Memperbaiki limitasi versi lama: sekarang benar-benar bisa pilih
+  /// dokumen (pdf, doc, dll) via file_picker, bukan sekadar pesan error.
   Future<void> _pickFile() async {
     Navigator.pop(context);
-    _showError(
-        'Untuk memilih file dokumen, gunakan package file_picker.\nSaat ini hanya foto yang didukung.');
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
+      );
+      if (result != null) {
+        setState(() {
+          for (final f in result.files) {
+            if (f.path != null) {
+              _attachments.add(_Attachment(path: f.path!, isImage: false));
+            }
+          }
+        });
+      }
+    } catch (e) {
+      _showError('Tidak dapat memilih file: $e');
+    }
   }
 
   void _showError(String msg) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
@@ -89,29 +105,63 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     setState(() => _attachments.removeAt(index));
   }
 
-  // ── Submit ─────────────────────────────────────────────────
-
-  void _submitTicket() async {
+  Future<void> _submitTicket() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 800)); // slight delay UX
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     final user = AuthService().currentUser;
-    TicketStore().createTicket(
-      userId: user?.id ?? '2',
-      userName: user?.name ?? 'John Doe',
+    if (user == null) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Sesi Anda telah berakhir, silakan login ulang.';
+      });
+      return;
+    }
+
+    // 1) Buat tiket dulu agar punya ticketId untuk path penyimpanan lampiran.
+    final error = await TicketService().createTicket(
+      userId: user.id,
       title: _titleCtrl.text.trim(),
       category: _selectedCategory,
       priority: _selectedPriority,
       description: _descCtrl.text.trim(),
-      attachments: _attachments.map((a) => a.path).toList(),
     );
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-      _showSuccessDialog();
+    if (error != null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error;
+      });
+      return;
     }
+
+    // 2) Upload lampiran ke Supabase Storage untuk tiket yang baru dibuat.
+    if (_attachments.isNotEmpty) {
+      final latestTicket = TicketService()
+          .tickets
+          .where((t) => t.userId == user.id)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (latestTicket.isNotEmpty) {
+        final ticketId = latestTicket.first.id;
+        for (final att in _attachments) {
+          try {
+            await TicketService().uploadAttachment(ticketId, att.path);
+          } catch (e) {
+            debugPrint('Gagal upload lampiran: $e');
+          }
+        }
+      }
+    }
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _showSuccessDialog();
   }
 
   void _showSuccessDialog() {
@@ -119,8 +169,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -144,16 +193,15 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             const Text(
               'Tiket Anda telah dikirim dan akan segera diproses oleh tim helpdesk.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: AppColors.textSecondaryLight, fontSize: 13),
+              style: TextStyle(color: AppColors.textSecondaryLight, fontSize: 13),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(context); // close dialog
-                  Navigator.pushReplacementNamed(context, '/tickets');
+                  Navigator.pop(context);
+                  Navigator.pop(context);
                 },
                 child: const Text('Lihat Tiket Saya'),
               ),
@@ -175,8 +223,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('Tambah Lampiran',
-                style:
-                    TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -235,8 +282,6 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     );
   }
 
-  // ── Build ──────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -254,14 +299,37 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Info Banner
+              if (_errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline,
+                          color: Colors.red, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_errorMessage!,
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.statusOpen.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.statusOpen.withOpacity(0.3)),
+                  border:
+                      Border.all(color: AppColors.statusOpen.withOpacity(0.3)),
                 ),
                 child: const Row(
                   children: [
@@ -271,8 +339,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                     Expanded(
                       child: Text(
                         'Isi formulir dengan lengkap agar tiket dapat ditangani lebih cepat.',
-                        style: TextStyle(
-                            fontSize: 12, color: AppColors.statusOpen),
+                        style:
+                            TextStyle(fontSize: 12, color: AppColors.statusOpen),
                       ),
                     ),
                   ],
@@ -280,7 +348,6 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Judul
               _buildLabel('Judul Keluhan *'),
               const SizedBox(height: 8),
               TextFormField(
@@ -294,14 +361,12 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Kategori
               _buildLabel('Kategori *'),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: _selectedCategory,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.category_outlined),
-                ),
+                decoration:
+                    const InputDecoration(prefixIcon: Icon(Icons.category_outlined)),
                 items: _categories
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
@@ -309,7 +374,6 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Prioritas
               _buildLabel('Prioritas *'),
               const SizedBox(height: 8),
               Row(
@@ -327,9 +391,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                         decoration: BoxDecoration(
                           color: isSelected
                               ? (p['color'] as Color).withOpacity(0.15)
-                              : Theme.of(context)
-                                  .inputDecorationTheme
-                                  .fillColor,
+                              : Theme.of(context).inputDecorationTheme.fillColor,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isSelected
@@ -360,7 +422,6 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Deskripsi
               _buildLabel('Deskripsi Detail *'),
               const SizedBox(height: 8),
               TextFormField(
@@ -369,17 +430,12 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                 decoration: const InputDecoration(
                   hintText:
                       'Jelaskan masalah secara detail, kapan terjadi, dampaknya, dsb.',
-                  prefixIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 80),
-                    child: Icon(Icons.description_outlined),
-                  ),
                 ),
                 validator: (v) =>
                     v!.isEmpty ? 'Deskripsi tidak boleh kosong' : null,
               ),
               const SizedBox(height: 16),
 
-              // Lampiran
               _buildLabel('Lampiran (Opsional)'),
               const SizedBox(height: 8),
               GestureDetector(
@@ -387,30 +443,24 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    border: Border.all(
-                      color: AppColors.primary.withOpacity(0.4),
-                    ),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.4)),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.attach_file_rounded,
-                          color: AppColors.primary),
+                      Icon(Icons.attach_file_rounded, color: AppColors.primary),
                       SizedBox(width: 8),
                       Text(
                         'Tambah Lampiran (Foto / File)',
                         style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
+                            color: AppColors.primary, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
                 ),
               ),
 
-              // Preview lampiran
               if (_attachments.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 SizedBox(
@@ -443,9 +493,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                               onTap: () => _removeAttachment(i),
                               child: Container(
                                 decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
-                                ),
+                                    color: Colors.black54, shape: BoxShape.circle),
                                 child: const Icon(Icons.close,
                                     color: Colors.white, size: 16),
                               ),
@@ -456,17 +504,13 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                     },
                   ),
                 ),
-                Text(
-                  '${_attachments.length} lampiran dipilih',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondaryLight),
-                ),
+                Text('${_attachments.length} lampiran dipilih',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondaryLight)),
               ],
 
               const SizedBox(height: 32),
 
-              // Submit
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -512,8 +556,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
           const SizedBox(height: 4),
           Text(
             path.split('/').last.split('\\').last,
-            style:
-                const TextStyle(fontSize: 9, color: AppColors.primary),
+            style: const TextStyle(fontSize: 9, color: AppColors.primary),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
@@ -523,11 +566,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     );
   }
 
-  Widget _buildLabel(String text) => Text(
-        text,
-        style:
-            const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-      );
+  Widget _buildLabel(String text) =>
+      Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600));
 
   @override
   void dispose() {

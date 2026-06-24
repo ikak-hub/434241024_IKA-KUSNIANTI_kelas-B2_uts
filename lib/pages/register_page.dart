@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,16 +19,66 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
+  String? _errorMessage;
 
-  void _register() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) {
-        setState(() => _isLoading = false);
-        Navigator.pushReplacementNamed(context, '/login');
-      }
+  Future<void> _register() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final error = await AuthService().register(
+      name: _nameCtrl.text.trim(),
+      email: _emailCtrl.text.trim(),
+      username: _usernameCtrl.text.trim(),
+      password: _passwordCtrl.text,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (error != null) {
+      setState(() => _errorMessage = error);
+      return;
     }
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.mark_email_read_rounded,
+                color: AppColors.statusResolved, size: 56),
+            const SizedBox(height: 12),
+            const Text('Pendaftaran Berhasil!',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 8),
+            const Text(
+              'Silakan cek email Anda untuk verifikasi akun sebelum login.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
+            ),
+          ],
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushReplacementNamed(context, '/login');
+              },
+              child: const Text('Ke Halaman Login'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -49,12 +100,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Heading
               Text(
                 'Buat Akun Baru',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
               Text(
@@ -65,9 +116,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       : AppColors.textSecondaryLight,
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
 
-              // Nama Lengkap
+              if (_errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline,
+                          color: Colors.red, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_errorMessage!,
+                            style: const TextStyle(
+                                color: Colors.red, fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               _buildLabel('Nama Lengkap'),
               const SizedBox(height: 8),
               TextFormField(
@@ -76,11 +150,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   hintText: 'Masukkan nama lengkap',
                   prefixIcon: Icon(Icons.badge_outlined),
                 ),
-                validator: (v) => v!.isEmpty ? 'Nama tidak boleh kosong' : null,
+                validator: (v) =>
+                    v!.isEmpty ? 'Nama tidak boleh kosong' : null,
               ),
               const SizedBox(height: 16),
 
-              // Email
               _buildLabel('Email'),
               const SizedBox(height: 8),
               TextFormField(
@@ -98,7 +172,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Username
               _buildLabel('Username'),
               const SizedBox(height: 8),
               TextFormField(
@@ -112,14 +185,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Password
               _buildLabel('Password'),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _passwordCtrl,
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
-                  hintText: 'Minimal 8 karakter',
+                  hintText: 'Minimal 6 karakter',
                   prefixIcon: const Icon(Icons.lock_outline_rounded),
                   suffixIcon: IconButton(
                     icon: Icon(_obscurePassword
@@ -131,13 +203,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 validator: (v) {
                   if (v!.isEmpty) return 'Password tidak boleh kosong';
-                  if (v.length < 8) return 'Password minimal 8 karakter';
+                  if (v.length < 6) return 'Password minimal 6 karakter';
                   return null;
                 },
               ),
               const SizedBox(height: 16),
 
-              // Konfirmasi Password
               _buildLabel('Konfirmasi Password'),
               const SizedBox(height: 8),
               TextFormField(
@@ -162,7 +233,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Register Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -179,7 +249,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Login link
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -196,9 +265,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: const Text(
                       'Masuk',
                       style: TextStyle(
-                        color: AppColors.accent,
-                        fontWeight: FontWeight.w600,
-                      ),
+                          color: AppColors.accent, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -211,10 +278,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-    );
+    return Text(text,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600));
   }
 
   @override

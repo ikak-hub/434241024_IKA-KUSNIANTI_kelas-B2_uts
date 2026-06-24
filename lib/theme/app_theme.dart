@@ -14,10 +14,8 @@ class AppColors {
   static const Color statusPending = Color(0xFF8B5CF6);
   static const Color statusRejected = Color(0xFFEF4444);
 
-  // Role colors
   static const Color roleAdmin = Color(0xFF1A3557);
   static const Color roleHelpdesk = Color(0xFF0891B2);
-  static const Color roleTech = Color(0xFF059669);
   static const Color roleUser = Color(0xFF6B7280);
 
   static const Color backgroundLight = Color(0xFFF0F4F8);

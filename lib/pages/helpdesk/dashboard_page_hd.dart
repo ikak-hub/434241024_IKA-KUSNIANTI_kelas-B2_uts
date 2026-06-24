@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
-import '../../services/ticket_store.dart';
+import '../../services/ticket_service.dart';
+import '../../models/ticket_model.dart';
+import '../notification_page.dart';
 
+/// Helpdesk Dashboard sesuai SRS FR-006: Helpdesk menangani tiket yang
+/// ditugaskan, memberi tanggapan, mengubah status, dan menutup tiket.
+/// (Role 'Technical Support' yang tidak ada di SRS telah dihapus —
+/// helpdesk sekarang menangani tiket langsung sampai selesai.)
 class HelpdeskDashboardScreen extends StatefulWidget {
   final VoidCallback onToggleTheme;
   final ThemeMode themeMode;
@@ -17,17 +23,10 @@ class HelpdeskDashboardScreen extends StatefulWidget {
 class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
   int _currentIndex = 0;
 
-  // Dummy list of technical support staff
-  final List<Map<String, String>> _techStaff = [
-    {'id': '4', 'name': 'Siti Teknisi'},
-    {'id': '10', 'name': 'Ahmad Teknisi'},
-    {'id': '11', 'name': 'Dewi Teknisi'},
-  ];
-
   @override
   void initState() {
     super.initState();
-    TicketStore().addListener(_refresh);
+    TicketService().addListener(_refresh);
   }
 
   void _refresh() {
@@ -36,117 +35,100 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
 
   @override
   void dispose() {
-    TicketStore().removeListener(_refresh);
+    TicketService().removeListener(_refresh);
     super.dispose();
   }
 
-  Color _flowColor(String fs) {
-    switch (fs) {
-      case 'approved':
+  Color _statusColor(TicketStatus s) {
+    switch (s) {
+      case TicketStatus.open:
         return AppColors.statusOpen;
-      case 'assigned_helpdesk':
+      case TicketStatus.assigned:
+        return AppColors.roleHelpdesk;
+      case TicketStatus.inProgress:
         return AppColors.statusInProgress;
-      case 'assigned_technical':
-        return AppColors.accent;
-      case 'in_progress':
-        return AppColors.statusInProgress;
-      case 'resolved':
+      case TicketStatus.resolved:
         return AppColors.statusResolved;
-      default:
+      case TicketStatus.closed:
         return AppColors.statusClosed;
     }
   }
 
-  String _flowLabel(String fs) {
-    switch (fs) {
-      case 'approved':
-        return 'Menunggu Helpdesk';
-      case 'assigned_helpdesk':
-        return 'Ditangani Helpdesk';
-      case 'assigned_technical':
-        return 'Diteruskan Teknisi';
-      case 'in_progress':
-        return 'Sedang Dikerjakan';
-      case 'resolved':
-        return 'Selesai';
-      default:
-        return fs;
+  Future<void> _acceptTicket(TicketModel ticket) async {
+    final user = AuthService().currentUser!;
+    final error = await TicketService().acceptTicket(ticket.id, user.id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error ?? 'Tiket diterima'),
+          backgroundColor:
+              error == null ? AppColors.statusResolved : Colors.red,
+        ),
+      );
     }
   }
 
-  void _acceptTicket(Map<String, dynamic> ticket) {
-    final user = AuthService().currentUser!;
-    TicketStore().helpdeskAcceptTicket(ticket['id'], user.id, user.name);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Tiket diterima oleh helpdesk'),
-          backgroundColor: AppColors.statusResolved),
-    );
+  Future<void> _startHandling(TicketModel ticket) async {
+    await TicketService().updateStatus(ticket.id, TicketStatus.inProgress);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Mulai menangani tiket'),
+            backgroundColor: AppColors.statusInProgress),
+      );
+    }
   }
 
-  void _forwardToTech(Map<String, dynamic> ticket) {
-    String? selectedTechId;
-    String? selectedTechName;
+  void _resolveDialog(TicketModel ticket) {
+    final ctrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
-          title: const Text('Teruskan ke Technical Support',
-              style: TextStyle(fontWeight: FontWeight.w700)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Pilih teknisi yang akan menangani:',
-                  style: TextStyle(fontSize: 13)),
-              const SizedBox(height: 12),
-              ..._techStaff.map((tech) => RadioListTile<String>(
-                    title: Text(tech['name']!),
-                    value: tech['id']!,
-                    groupValue: selectedTechId,
-                    onChanged: (v) {
-                      setS(() {
-                        selectedTechId = v;
-                        selectedTechName = tech['name'];
-                      });
-                    },
-                    activeColor: AppColors.primary,
-                  )),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Batal')),
-            ElevatedButton(
-              onPressed: selectedTechId == null
-                  ? null
-                  : () {
-                      Navigator.pop(ctx);
-                      TicketStore().helpdeskForwardToTech(
-                        ticket['id'],
-                        selectedTechId!,
-                        selectedTechName!,
-                        AuthService().currentUser?.name ?? 'Helpdesk',
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text(
-                                'Tiket diteruskan ke $selectedTechName'),
-                            backgroundColor: AppColors.statusResolved),
-                      );
-                    },
-              child: const Text('Teruskan'),
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Selesaikan Tiket',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Tuliskan ringkasan penyelesaian:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              decoration: const InputDecoration(
+                  hintText: 'Masalah telah diselesaikan dengan...'),
+              maxLines: 4,
             ),
           ],
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal')),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppColors.statusResolved),
+            onPressed: () async {
+              Navigator.pop(context);
+              await TicketService().resolveTicket(
+                ticket.id,
+                ctrl.text.isNotEmpty ? ctrl.text : 'Masalah telah diselesaikan.',
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Tiket berhasil diselesaikan!'),
+                      backgroundColor: AppColors.statusResolved),
+                );
+              }
+            },
+            child: const Text('Selesaikan'),
+          ),
+        ],
       ),
     );
   }
 
-  void _addComment(Map<String, dynamic> ticket) {
+  void _addComment(TicketModel ticket) {
     final ctrl = TextEditingController();
     showDialog(
       context: context,
@@ -154,8 +136,7 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
         title: const Text('Tambah Komentar'),
         content: TextField(
           controller: ctrl,
-          decoration:
-              const InputDecoration(hintText: 'Tulis komentar...'),
+          decoration: const InputDecoration(hintText: 'Tulis komentar...'),
           maxLines: 3,
         ),
         actions: [
@@ -163,19 +144,18 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Batal')),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              final user = AuthService().currentUser!;
               if (ctrl.text.trim().isNotEmpty) {
-                final now = DateTime.now();
-                TicketStore().addComment(ticket['id'], {
-                  'user': AuthService().currentUser?.name ?? 'Helpdesk',
-                  'role': 'Helpdesk',
-                  'message': ctrl.text.trim(),
-                  'time':
-                      '${now.day}/${now.month}/${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-                  'isHelpdesk': true,
-                });
+                await TicketService().addComment(
+                  ticketId: ticket.id,
+                  authorId: user.id,
+                  authorName: user.name,
+                  authorRole: 'Helpdesk',
+                  message: ctrl.text.trim(),
+                );
               }
-              Navigator.pop(context);
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Kirim'),
           ),
@@ -186,7 +166,14 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final store = TicketStore();
+    if (_currentIndex == 2) {
+      return Scaffold(
+        body: const NotificationScreen(),
+        bottomNavigationBar: _buildNavBar(),
+      );
+    }
+
+    final store = TicketService();
     final user = AuthService().currentUser!;
     final myTickets = store.ticketsForHelpdesk(user.id);
 
@@ -206,178 +193,189 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
                 : Icons.dark_mode_rounded),
             onPressed: widget.onToggleTheme,
           ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () {
-              AuthService().logout();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-          ),
         ],
       ),
       body: pages[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard_rounded),
-              label: 'Dashboard'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.list_alt_outlined),
-              activeIcon: Icon(Icons.list_alt_rounded),
-              label: 'Tiket Saya'),
-        ],
-      ),
+      bottomNavigationBar: _buildNavBar(),
     );
   }
 
-  Widget _buildDashboard(
-      List<Map<String, dynamic>> myTickets, user) {
+  Widget _buildNavBar() {
+    return BottomNavigationBar(
+      currentIndex: _currentIndex,
+      onTap: (i) {
+        if (i == 3) {
+          Navigator.pushNamed(context, '/profile');
+          return;
+        }
+        setState(() => _currentIndex = i);
+      },
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard_rounded),
+            label: 'Dashboard'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.list_alt_outlined),
+            activeIcon: Icon(Icons.list_alt_rounded),
+            label: 'Tiket Saya'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.notifications_outlined),
+            activeIcon: Icon(Icons.notifications_rounded),
+            label: 'Notifikasi'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline_rounded),
+            activeIcon: Icon(Icons.person_rounded),
+            label: 'Profil'),
+      ],
+    );
+  }
+
+  Widget _buildDashboard(List<TicketModel> myTickets, user) {
     final waiting =
-        myTickets.where((t) => t['flowStatus'] == 'approved').length;
-    final handling = myTickets
-        .where((t) => t['flowStatus'] == 'assigned_helpdesk')
-        .length;
-    final forwarded = myTickets
-        .where((t) =>
-            t['flowStatus'] == 'assigned_technical' ||
-            t['flowStatus'] == 'in_progress')
-        .length;
+        myTickets.where((t) => t.status == TicketStatus.open).length;
+    final handling =
+        myTickets.where((t) => t.status == TicketStatus.assigned).length;
+    final inProgress =
+        myTickets.where((t) => t.status == TicketStatus.inProgress).length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Greeting
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [Color(0xFF0891B2), Color(0xFF0E7490)]),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
+    return RefreshIndicator(
+      onRefresh: () => TicketService().loadTickets(),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [Color(0xFF0891B2), Color(0xFF0E7490)]),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.support_agent_rounded,
+                        color: Colors.white, size: 28),
                   ),
-                  child: const Icon(Icons.support_agent_rounded,
-                      color: Colors.white, size: 28),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Halo, ${user.name} 👋',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700)),
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Text('Tim Helpdesk',
-                            style: TextStyle(
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Halo, ${user.name} 👋',
+                            style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                    ],
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700)),
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text('Tim Helpdesk',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Alur tugas helpdesk
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.roleHelpdesk.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: AppColors.roleHelpdesk.withOpacity(0.3)),
-            ),
-            child: const Text(
-              'Tugas Helpdesk:\n1. Terima tiket yang disetujui admin\n2. Kaji dan teruskan ke Technical Support\n3. Monitor penanganan tiket',
-              style: TextStyle(fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Stats
-          Row(
-            children: [
-              _miniStat('Menunggu', '$waiting', AppColors.statusOpen),
-              const SizedBox(width: 10),
-              _miniStat('Ditangani', '$handling', AppColors.statusInProgress),
-              const SizedBox(width: 10),
-              _miniStat('Diteruskan', '$forwarded', AppColors.accent),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Tiket menunggu helpdesk
-          const Text('Tiket Menunggu Tindakan',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          const SizedBox(height: 12),
-
-          ...myTickets
-              .where((t) =>
-                  t['flowStatus'] == 'approved' ||
-                  t['flowStatus'] == 'assigned_helpdesk')
-              .map((t) => _ticketCard(t)),
-
-          if (myTickets
-              .where((t) =>
-                  t['flowStatus'] == 'approved' ||
-                  t['flowStatus'] == 'assigned_helpdesk')
-              .isEmpty)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('Tidak ada tiket aktif',
-                    style: TextStyle(
-                        color: AppColors.textSecondaryLight)),
+                ],
               ),
             ),
-        ],
+            const SizedBox(height: 20),
+
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.roleHelpdesk.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.roleHelpdesk.withOpacity(0.3)),
+              ),
+              child: const Text(
+                'Tugas Helpdesk:\n1. Terima tiket yang masuk\n2. Tangani & beri tanggapan\n3. Selesaikan & tutup tiket',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                _miniStat('Menunggu', '$waiting', AppColors.statusOpen),
+                const SizedBox(width: 10),
+                _miniStat('Ditugaskan', '$handling', AppColors.roleHelpdesk),
+                const SizedBox(width: 10),
+                _miniStat('Diproses', '$inProgress', AppColors.statusInProgress),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            const Text('Tiket Menunggu Tindakan',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 12),
+
+            if (TicketService().isLoading && myTickets.isEmpty)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              ...myTickets
+                  .where((t) =>
+                      t.status == TicketStatus.open ||
+                      t.status == TicketStatus.assigned ||
+                      t.status == TicketStatus.inProgress)
+                  .map((t) => _ticketCard(t)),
+              if (myTickets
+                  .where((t) =>
+                      t.status == TicketStatus.open ||
+                      t.status == TicketStatus.assigned ||
+                      t.status == TicketStatus.inProgress)
+                  .isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child:
+                        Text('Tidak ada tiket aktif', style: TextStyle(color: AppColors.textSecondaryLight)),
+                  ),
+                ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildTicketList(List<Map<String, dynamic>> myTickets) {
+  Widget _buildTicketList(List<TicketModel> myTickets) {
     if (myTickets.isEmpty) {
-      return const Center(
-          child: Text('Belum ada tiket yang ditugaskan'));
+      return const Center(child: Text('Belum ada tiket yang ditugaskan'));
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: myTickets.length,
-      itemBuilder: (_, i) => _ticketCard(myTickets[i]),
+    return RefreshIndicator(
+      onRefresh: () => TicketService().loadTickets(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: myTickets.length,
+        itemBuilder: (_, i) => _ticketCard(myTickets[i]),
+      ),
     );
   }
 
-  Widget _ticketCard(Map<String, dynamic> ticket) {
-    final fs = ticket['flowStatus'] as String;
-    final fc = _flowColor(fs);
-    final canAccept = fs == 'approved';
-    final canForward = fs == 'assigned_helpdesk';
+  Widget _ticketCard(TicketModel ticket) {
+    final fc = _statusColor(ticket.status);
+    final canAccept = ticket.status == TicketStatus.open;
+    final canStart = ticket.status == TicketStatus.assigned;
+    final canResolve = ticket.status == TicketStatus.inProgress;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -388,36 +386,23 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
           children: [
             Row(
               children: [
-                Text(ticket['id'] as String,
+                Text(ticket.ticketNumber,
                     style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondaryLight,
                         fontWeight: FontWeight.w600)),
                 const Spacer(),
-                _badge(_flowLabel(fs), fc),
+                _badge(ticketStatusLabel(ticket.status), fc),
               ],
             ),
             const SizedBox(height: 6),
-            Text(ticket['title'] as String,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 15),
+            Text(ticket.title,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis),
             const SizedBox(height: 4),
-            Text('Oleh: ${ticket['user']} · ${ticket['date']}',
-                style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondaryLight)),
-            if (ticket['assignedTechName'] != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                    'Teknisi: ${ticket['assignedTechName']}',
-                    style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.roleTech,
-                        fontWeight: FontWeight.w600)),
-              ),
+            Text('Oleh: ${ticket.userName} · ${ticket.category}',
+                style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -427,26 +412,34 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
                   ElevatedButton.icon(
                     onPressed: () => _acceptTicket(ticket),
                     icon: const Icon(Icons.inbox_rounded, size: 14),
-                    label: const Text('Terima',
-                        style: TextStyle(fontSize: 12)),
+                    label: const Text('Terima', style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.roleHelpdesk,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
-                if (canForward)
+                if (canStart)
                   ElevatedButton.icon(
-                    onPressed: () => _forwardToTech(ticket),
-                    icon: const Icon(Icons.forward_rounded, size: 14),
-                    label: const Text('Teruskan ke Teknisi',
-                        style: TextStyle(fontSize: 12)),
+                    onPressed: () => _startHandling(ticket),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 14),
+                    label: const Text('Mulai Tangani', style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                      backgroundColor: AppColors.statusInProgress,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                if (canResolve)
+                  ElevatedButton.icon(
+                    onPressed: () => _resolveDialog(ticket),
+                    icon: const Icon(Icons.check_circle_outline, size: 14),
+                    label: const Text('Selesaikan', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.statusResolved,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -454,16 +447,24 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
                 OutlinedButton.icon(
                   onPressed: () => _addComment(ticket),
                   icon: const Icon(Icons.comment_outlined, size: 14),
-                  label: const Text('Komentar',
-                      style: TextStyle(fontSize: 12)),
+                  label: const Text('Komentar', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     foregroundColor: AppColors.primary,
-                    side:
-                        const BorderSide(color: AppColors.primary),
+                    side: const BorderSide(color: AppColors.primary),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, '/ticket-detail',
+                      arguments: {'ticketId': ticket.id}),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                  label: const Text('Detail', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
               ],
@@ -486,12 +487,8 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
         child: Column(
           children: [
             Text(val,
-                style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 20,
-                    color: color)),
-            Text(label,
-                style: const TextStyle(fontSize: 11)),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: color)),
+            Text(label, style: const TextStyle(fontSize: 11)),
           ],
         ),
       ),
@@ -507,10 +504,7 @@ class _HelpdeskDashboardScreenState extends State<HelpdeskDashboardScreen> {
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Text(label,
-          style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w600)),
+          style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
     );
   }
 }

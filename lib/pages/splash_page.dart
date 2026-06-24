@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../models/user_model.dart';
+import '../services/auth_service.dart';
+import '../services/ticket_service.dart';
+import '../services/notification_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -24,20 +28,54 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     _fadeAnim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0, 0.6, curve: Curves.easeOut)),
+      CurvedAnimation(
+          parent: _controller, curve: const Interval(0, 0.6, curve: Curves.easeOut)),
     );
     _scaleAnim = Tween<double>(begin: 0.6, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0, 0.6, curve: Curves.elasticOut)),
+      CurvedAnimation(
+          parent: _controller,
+          curve: const Interval(0, 0.6, curve: Curves.elasticOut)),
     );
     _slideAnim = Tween<double>(begin: 30, end: 0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.4, 1.0, curve: Curves.easeOut)),
+      CurvedAnimation(
+          parent: _controller, curve: const Interval(0.4, 1.0, curve: Curves.easeOut)),
     );
 
     _controller.forward();
+    _checkSessionAndNavigate();
+  }
 
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) Navigator.pushReplacementNamed(context, '/login');
-    });
+  Future<void> _checkSessionAndNavigate() async {
+    await Future.delayed(const Duration(milliseconds: 1800));
+    if (!mounted) return;
+
+    final user = await AuthService().restoreSession();
+    if (!mounted) return;
+
+    if (user == null) {
+      Navigator.pushReplacementNamed(context, '/login');
+      return;
+    }
+
+    // Sesi aktif ditemukan: muat data & subscribe realtime, lalu arahkan
+    // ke dashboard sesuai role (3 role sesuai SRS: admin/helpdesk/user).
+    await TicketService().loadTickets();
+    TicketService().subscribeRealtime();
+    await NotificationService().loadNotifications();
+    NotificationService().subscribeRealtime(user.id);
+
+    if (!mounted) return;
+    switch (user.role) {
+      case UserRole.admin:
+        Navigator.pushReplacementNamed(context, '/admin-dashboard');
+        break;
+      case UserRole.helpdesk:
+        Navigator.pushReplacementNamed(context, '/helpdesk-dashboard');
+        break;
+      case UserRole.user:
+        Navigator.pushReplacementNamed(context, '/dashboard');
+        break;
+    }
   }
 
   @override
@@ -62,7 +100,6 @@ class _SplashScreenState extends State<SplashScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo Icon
                 AnimatedBuilder(
                   animation: _controller,
                   builder: (_, _) => FadeTransition(
@@ -91,10 +128,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 32),
-
-                // App Name
                 AnimatedBuilder(
                   animation: _controller,
                   builder: (_, _) => FadeTransition(
@@ -145,10 +179,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 80),
-
-                // Loading indicator
                 AnimatedBuilder(
                   animation: _controller,
                   builder: (_, _) => FadeTransition(

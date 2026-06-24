@@ -1,8 +1,11 @@
-// lib/pages/admin/admin_ticket_management_page.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/admin_bottom_nav.dart';
-import '../../services/ticket_store.dart';
+import '../../services/ticket_service.dart';
+import '../../models/ticket_model.dart';
+import '../../models/user_model.dart';
 
 class AdminTicketManagementScreen extends StatefulWidget {
   const AdminTicketManagementScreen({super.key});
@@ -18,116 +21,134 @@ class _AdminTicketManagementScreenState
   late TabController _tabController;
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
+  List<UserModel> _helpdeskStaff = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    TicketStore().addListener(_refresh);
+    _tabController = TabController(length: 5, vsync: this);
+    TicketService().addListener(_refresh);
+    _loadHelpdeskStaff();
   }
 
   void _refresh() {
     if (mounted) setState(() {});
   }
 
+  Future<void> _loadHelpdeskStaff() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('role', 'helpdesk')
+          .eq('is_active', true);
+      if (!mounted) return;
+      setState(() {
+        _helpdeskStaff =
+            (data as List).map((e) => UserModel.fromMap(e)).toList();
+      });
+    } catch (e) {
+      debugPrint('loadHelpdeskStaff error: $e');
+    }
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
     _searchCtrl.dispose();
-    TicketStore().removeListener(_refresh);
+    TicketService().removeListener(_refresh);
     super.dispose();
   }
 
-  List<Map<String, dynamic>> _filtered(String status) {
-    final all = TicketStore().allTickets;
-    final list = status == 'All'
-        ? all
-        : all.where((t) => t['status'] == status).toList();
+  List<TicketModel> _filtered(TicketStatus? status) {
+    final all = TicketService().tickets;
+    final list =
+        status == null ? all : all.where((t) => t.status == status).toList();
     if (_searchQuery.isEmpty) return list;
+    final q = _searchQuery.toLowerCase();
     return list
         .where((t) =>
-            (t['title'] as String)
-                .toLowerCase()
-                .contains(_searchQuery.toLowerCase()) ||
-            (t['id'] as String)
-                .toLowerCase()
-                .contains(_searchQuery.toLowerCase()) ||
-            (t['user'] as String)
-                .toLowerCase()
-                .contains(_searchQuery.toLowerCase()))
+            t.title.toLowerCase().contains(q) ||
+            t.ticketNumber.toLowerCase().contains(q) ||
+            t.userName.toLowerCase().contains(q))
         .toList();
   }
 
-  Color _statusColor(String s) {
+  Color _statusColor(TicketStatus s) {
     switch (s) {
-      case 'Open':
+      case TicketStatus.open:
         return AppColors.statusOpen;
-      case 'In Progress':
+      case TicketStatus.assigned:
+        return AppColors.roleHelpdesk;
+      case TicketStatus.inProgress:
         return AppColors.statusInProgress;
-      case 'Resolved':
+      case TicketStatus.resolved:
         return AppColors.statusResolved;
-      default:
+      case TicketStatus.closed:
         return AppColors.statusClosed;
     }
   }
 
   Color _priorityColor(String p) {
-    switch (p) {
-      case 'High':
+    switch (p.toLowerCase()) {
+      case 'high':
         return Colors.red;
-      case 'Medium':
-        return Colors.orange;
-      default:
+      case 'low':
         return Colors.green;
+      default:
+        return Colors.orange;
     }
   }
 
-  void _showStatusDialog(Map<String, dynamic> ticket) {
-    String selectedStatus = ticket['status'] as String;
+  void _showAssignDialog(TicketModel ticket) {
+    String? selectedId;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: const Text('Update Status Tiket',
-            style: TextStyle(fontWeight: FontWeight.w700)),
-        content: StatefulBuilder(
-          builder: (ctx, setS) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: ['Open', 'In Progress', 'Resolved', 'Closed']
-                .map((s) => RadioListTile<String>(
-                      title: Text(s,
-                          style: TextStyle(
-                              color: _statusColor(s),
-                              fontWeight: FontWeight.w600)),
-                      value: s,
-                      groupValue: selectedStatus,
-                      onChanged: (v) => setS(() => selectedStatus = v!),
-                      activeColor: _statusColor(s),
-                    ))
-                .toList(),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () {
-              TicketStore()
-                  .updateStatus(ticket['id'] as String, selectedStatus);
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      'Status tiket ${ticket['id']} diubah ke $selectedStatus'),
-                  backgroundColor: AppColors.statusResolved,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Tugaskan ke Helpdesk',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+          content: _helpdeskStaff.isEmpty
+              ? const Text('Belum ada staff helpdesk aktif.')
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _helpdeskStaff
+                      .map((h) => RadioListTile<String>(
+                            title: Text(h.name),
+                            subtitle: Text(h.email, style: const TextStyle(fontSize: 11)),
+                            value: h.id,
+                            groupValue: selectedId,
+                            onChanged: (v) => setS(() => selectedId = v),
+                            activeColor: AppColors.primary,
+                          ))
+                      .toList(),
                 ),
-              );
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: selectedId == null
+                  ? null
+                  : () async {
+                      Navigator.pop(ctx);
+                      final error = await TicketService()
+                          .assignToHelpdesk(ticket.id, selectedId!);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(error ??
+                                'Tiket ${ticket.ticketNumber} berhasil ditugaskan'),
+                            backgroundColor:
+                                error == null ? AppColors.statusResolved : Colors.red,
+                          ),
+                        );
+                      }
+                    },
+              child: const Text('Tugaskan'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -140,14 +161,16 @@ class _AdminTicketManagementScreenState
         automaticallyImplyLeading: false,
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           indicatorColor: AppColors.accent,
           indicatorWeight: 3,
           tabs: const [
             Tab(text: 'Semua'),
-            Tab(text: 'Open'),
-            Tab(text: 'Progress'),
+            Tab(text: 'Menunggu'),
+            Tab(text: 'Ditugaskan'),
+            Tab(text: 'Proses'),
             Tab(text: 'Selesai'),
           ],
         ),
@@ -178,10 +201,11 @@ class _AdminTicketManagementScreenState
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildList('All'),
-                _buildList('Open'),
-                _buildList('In Progress'),
-                _buildList('Resolved'),
+                _buildList(null),
+                _buildList(TicketStatus.open),
+                _buildList(TicketStatus.assigned),
+                _buildList(TicketStatus.inProgress),
+                _buildList(TicketStatus.resolved),
               ],
             ),
           ),
@@ -190,171 +214,216 @@ class _AdminTicketManagementScreenState
       bottomNavigationBar: AdminBottomNav(
         currentIndex: 1,
         onTap: (i) {
-          if (i == 0) {
-            Navigator.pushReplacementNamed(context, '/admin-dashboard');
-          }
-          if (i == 2) {
-            Navigator.pushReplacementNamed(context, '/admin-users');
-          }
-          if (i == 3) {
-            Navigator.pushReplacementNamed(context, '/admin-profile');
-          }
+          if (i == 0) Navigator.pushReplacementNamed(context, '/admin-dashboard');
+          if (i == 2) Navigator.pushReplacementNamed(context, '/admin-users');
+          if (i == 3) Navigator.pushNamed(context, '/notifications');
+          if (i == 4) Navigator.pushNamed(context, '/profile');
         },
       ),
     );
   }
 
-  Widget _buildList(String status) {
+  Widget _buildList(TicketStatus? status) {
     final list = _filtered(status);
+    if (TicketService().isLoading && list.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (list.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_outlined,
-                size: 64, color: Colors.grey.shade400),
+            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text('Tidak ada tiket',
-                style: TextStyle(
-                    color: Colors.grey.shade500, fontSize: 16)),
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 16)),
           ],
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-      itemCount: list.length,
-      itemBuilder: (_, i) {
-        final ticket = list[i];
-        final statusColor = _statusColor(ticket['status'] as String);
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(ticket['id'] as String,
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondaryLight)),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color:
-                            _priorityColor(ticket['priority'] as String)
-                                .withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
+    return RefreshIndicator(
+      onRefresh: () => TicketService().loadTickets(),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+        itemCount: list.length,
+        itemBuilder: (_, i) {
+          final ticket = list[i];
+          final statusColor = _statusColor(ticket.status);
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(ticket.ticketNumber,
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondaryLight)),
+                      const Spacer(),
+                      Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _priorityColor(ticket.priority).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(ticket.priorityLabel,
+                            style: TextStyle(
+                                color: _priorityColor(ticket.priority),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600)),
                       ),
-                      child: Text(ticket['priority'] as String,
-                          style: TextStyle(
-                              color: _priorityColor(
-                                  ticket['priority'] as String),
-                              fontSize: 11,
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(ticket.title,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.person_outline,
+                          size: 13, color: AppColors.textSecondaryLight),
+                      const SizedBox(width: 4),
+                      Text(ticket.userName,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondaryLight)),
+                      const SizedBox(width: 12),
+                      const Icon(Icons.calendar_today_outlined,
+                          size: 13, color: AppColors.textSecondaryLight),
+                      const SizedBox(width: 4),
+                      Text(DateFormat('d MMM yyyy').format(ticket.createdAt),
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondaryLight)),
+                    ],
+                  ),
+                  if (ticket.assignedHelpdeskName != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                          'Helpdesk: ${ticket.assignedHelpdeskName}',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.roleHelpdesk,
                               fontWeight: FontWeight.w600)),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(ticket['title'] as String,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 14),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.person_outline,
-                        size: 13,
-                        color: AppColors.textSecondaryLight),
-                    const SizedBox(width: 4),
-                    Text(ticket['user'] as String,
-                        style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondaryLight)),
-                    const SizedBox(width: 12),
-                    const Icon(Icons.calendar_today_outlined,
-                        size: 13,
-                        color: AppColors.textSecondaryLight),
-                    const SizedBox(width: 4),
-                    Text(ticket['date'] as String,
-                        style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondaryLight)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                  color: statusColor, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(ticketStatusLabel(ticket.status),
+                                style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                                color: statusColor,
-                                shape: BoxShape.circle),
+                      const Spacer(),
+                      if (ticket.status == TicketStatus.open)
+                        OutlinedButton.icon(
+                          onPressed: () => _showAssignDialog(ticket),
+                          icon: const Icon(Icons.person_add_alt_rounded, size: 14),
+                          label: const Text('Tugaskan', style: TextStyle(fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.primary),
                           ),
-                          const SizedBox(width: 6),
-                          Text(ticket['status'] as String,
-                              style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                        ],
+                        ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pushNamed(
+                            context, '/ticket-detail',
+                            arguments: {'ticketId': ticket.id}),
+                        style: ElevatedButton.styleFrom(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                        child: const Text('Detail'),
                       ),
-                    ),
-                    const Spacer(),
-                    OutlinedButton.icon(
-                      onPressed: () => _showStatusDialog(ticket),
-                      icon: const Icon(Icons.edit_outlined, size: 14),
-                      label: const Text('Update',
-                          style: TextStyle(fontSize: 12)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        foregroundColor: AppColors.primary,
-                        side:
-                            const BorderSide(color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: () => _confirmDelete(ticket),
+                        icon: const Icon(Icons.delete_outline_rounded,
+                            color: Colors.red, size: 20),
+                        tooltip: 'Hapus Tiket',
+                        constraints: const BoxConstraints(),
+                        padding: const EdgeInsets.all(6),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pushNamed(
-                          context, '/admin-ticket-detail',
-                          arguments: ticket),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        textStyle: const TextStyle(fontSize: 12),
-                      ),
-                      child: const Text('Detail'),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmDelete(TicketModel ticket) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Hapus Tiket',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: Text(
+            'Tiket ${ticket.ticketNumber} "${ticket.title}" akan dihapus permanen beserta riwayat dan lampirannya. Lanjutkan?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(context);
+              final error = await TicketService().deleteTicket(ticket.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(error ??
+                        'Tiket ${ticket.ticketNumber} berhasil dihapus'),
+                    backgroundColor: error == null
+                        ? AppColors.statusResolved
+                        : Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Hapus'),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
